@@ -26,3 +26,15 @@ export async function apiGet(endpoint) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+export async function apiPost(endpoint) {
+  const { user, password } = getCredentials();
+  const body = new URLSearchParams({ user, password });
+  const res = await fetch(`/adm/api/v1/${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
