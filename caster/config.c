@@ -406,6 +406,8 @@ static const cyaml_schema_field_t top_mapping_schema[] = {
 		struct config, webroots, &webroots_schema, 0, CYAML_UNLIMITED),
 	CYAML_FIELD_STRING_PTR(
 		"syncer_auth", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config, syncer_auth, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_STRING_PTR(
+		"ui_dir", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config, ui_dir, 0, CYAML_UNLIMITED),
 	CYAML_FIELD_SEQUENCE(
 		"rtcm_filter", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL,
 		struct config, rtcm_filter, &rtcm_filter_schema, 0, 1),
@@ -636,6 +638,7 @@ void config_free(struct config *this) {
 
 	free((char *)this->trusted_http_proxy);
 	free((char *)this->syncer_auth);
+	free((char *)this->ui_dir);
 	free((char *)this->host_auth_filename);
 	free((char *)this->source_auth_filename);
 	free((char *)this->blocklist_filename);

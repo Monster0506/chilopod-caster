@@ -1,4 +1,8 @@
+#include <fcntl.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
@@ -14,7 +18,107 @@
 #include "request.h"
 #include "sourcetable.h"
 
+static const char *
+ui_mime_type(const char *path) {
+	const char *dot = strrchr(path, '.');
+	if (!dot) return "application/octet-stream";
+	if (!strcmp(dot, ".html")) return "text/html";
+	if (!strcmp(dot, ".js"))   return "application/javascript";
+	if (!strcmp(dot, ".css"))  return "text/css";
+	if (!strcmp(dot, ".json")) return "application/json";
+	if (!strcmp(dot, ".svg"))  return "image/svg+xml";
+	if (!strcmp(dot, ".ico"))  return "image/x-icon";
+	return "application/octet-stream";
+}
+
+/*
+ * Serve static files from ui_dir for GET /adm/ui/...
+ * Returns 1 if handled (success or error), 0 if not a UI path.
+ */
+static int
+ui_serve(struct ntrip_state *st, const char *uri, int *err) {
+	const char *ui_dir = st->config->ui_dir;
+
+	if (strcmp(uri, "/ui") && strncmp(uri, "/ui/", 4))
+		return 0;
+
+	if (ui_dir == NULL) {
+		*err = 404;
+		return 1;
+	}
+
+	/* Determine the relative path within ui_dir */
+	const char *rel;
+	if (!strcmp(uri, "/ui") || !strcmp(uri, "/ui/"))
+		rel = "index.html";
+	else
+		rel = uri + 4;	/* skip "/ui/" */
+
+	/* Path traversal check: forbid any ".." component */
+	const char *p = rel;
+	while (*p) {
+		if (p[0] == '.' && p[1] == '.') {
+			*err = 404;
+			return 1;
+		}
+		while (*p && *p != '/') p++;
+		if (*p == '/') p++;
+	}
+
+	/* Build absolute path: ui_dir "/" rel */
+	size_t dlen = strlen(ui_dir);
+	size_t rlen = strlen(rel);
+	char *path = (char *)strmalloc(dlen + rlen + 2);
+	if (path == NULL) {
+		*err = 503;
+		return 1;
+	}
+	memcpy(path, ui_dir, dlen);
+	path[dlen] = '/';
+	memcpy(path + dlen + 1, rel, rlen + 1);
+
+	struct stat sb;
+	int fd = open(path, O_RDONLY);
+	strfree(path);
+	if (fd < 0) {
+		*err = 404;
+		return 1;
+	}
+
+	if (fstat(fd, &sb) < 0 || (sb.st_mode & S_IFMT) != S_IFREG) {
+		close(fd);
+		*err = 404;
+		return 1;
+	}
+
+	char *content = (char *)malloc(sb.st_size);
+	if (content == NULL) {
+		close(fd);
+		*err = 503;
+		return 1;
+	}
+
+	if (read(fd, content, sb.st_size) != sb.st_size) {
+		free(content);
+		close(fd);
+		*err = 503;
+		return 1;
+	}
+	close(fd);
+
+	st->client_version = 0;
+	struct evbuffer *output = bufferevent_get_output(st->bev);
+	struct mime_content *m = mime_new(content, sb.st_size, ui_mime_type(rel), 0);
+	ntripsrv_send_result_ok(st, output, m, NULL);
+	ntrip_set_state(st, NTRIP_WAIT_CLOSE);
+	return 1;
+}
+
 int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, const char *uri, int *err, struct evkeyvalq *headers) {
+	/* Serve static UI files without authentication */
+	if (!strcmp(method, "GET") && ui_serve(st, uri, err))
+		return (*err) ? -1 : 0;
+
 	struct evbuffer *output = bufferevent_get_output(st->bev);
 	int json_post = 0;
 	struct request *req = request_new();

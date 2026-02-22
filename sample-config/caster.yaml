@@ -138,3 +138,7 @@ backlog_evbuffer: 16384
 
 # admin user for the /adm section
 admin_user:	admin
+
+# Directory to serve static UI files from (GET /adm/ui/...)
+# Omit or leave unset to disable static file serving.
+ui_dir:	/usr/local/etc/millipede/ui
