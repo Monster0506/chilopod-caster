@@ -46,27 +46,112 @@ FreeBSD: `cd caster; make clean depend all`
 
 Debian: `cd caster; make clean all`
 
+Installation (Debian/Linux)
+==========================
+
+As root:
+
+1. Create a `caster` user:
+   ```sh
+   useradd --system --no-create-home --shell /usr/sbin/nologin caster
+   ```
+
+2. Install the binary and `mapi` tool:
+   ```sh
+   cd caster && make install
+   ```
+
+3. Create config and log directories:
+   ```sh
+   mkdir -p /usr/local/etc/millipede
+   mkdir -p /var/log/millipede
+   chown caster /var/log/millipede
+   ```
+
+4. Copy sample config files:
+   ```sh
+   cp sample-config/caster.yaml    /usr/local/etc/millipede/caster.yaml
+   cp sample-config/source.auth    /usr/local/etc/millipede/source.auth
+   cp sample-config/host.auth      /usr/local/etc/millipede/host.auth
+   cp sample-config/sourcetable.dat /usr/local/etc/millipede/sourcetable.dat
+   cp sample-config/blocklist      /usr/local/etc/millipede/blocklist
+   ```
+
+5. Edit `/usr/local/etc/millipede/caster.yaml` and `/usr/local/etc/millipede/source.auth` for your setup (see Configuration Reference below).
+
+6. Run the caster:
+   ```sh
+   /usr/local/sbin/caster -d
+   ```
+   Or create a systemd unit — see Running below.
+
 Installation (FreeBSD)
 ======================
 
 As root:
-1. Create a `caster` user: `pw useradd -n caster -d /nonexistent -s /bin/nologin`
-2. `cd caster; make install`
-3. Create configuration files in (default) `/usr/local/etc/millipede/`,
-   samples in `sample-config/`.
-	* `caster.yaml` main configuration file
-	* `sourcetable.dat` our local sourcetable
-	* `source.auth` authentication of sources from our sourcetable
-	* `host.auth` authentication as a client to other hosts
-4. `mkdir /var/log/millipede && chown caster /var/log/millipede`
-5. `install -m 0755 sample-config/caster.sh /usr/local/etc/rc.d/caster`
-6. `sysrc caster_enable=YES`
 
+1. Create a `caster` user:
+   ```sh
+   pw useradd -n caster -d /nonexistent -s /bin/nologin
+   ```
+
+2. Install the binary and `mapi` tool:
+   ```sh
+   cd caster && make install
+   ```
+
+3. Create config and log directories:
+   ```sh
+   mkdir -p /usr/local/etc/millipede
+   mkdir -p /var/log/millipede
+   chown caster /var/log/millipede
+   ```
+
+4. Copy sample config files:
+   ```sh
+   cp sample-config/caster.yaml     /usr/local/etc/millipede/caster.yaml
+   cp sample-config/source.auth     /usr/local/etc/millipede/source.auth
+   cp sample-config/host.auth       /usr/local/etc/millipede/host.auth
+   cp sample-config/sourcetable.dat /usr/local/etc/millipede/sourcetable.dat
+   cp sample-config/blocklist       /usr/local/etc/millipede/blocklist
+   ```
+
+5. Edit `/usr/local/etc/millipede/caster.yaml` and `/usr/local/etc/millipede/source.auth` for your setup (see Configuration Reference below).
+
+6. Install the rc script and enable at boot:
+   ```sh
+   install -m 0755 sample-config/caster.sh /usr/local/etc/rc.d/caster
+   sysrc caster_enable=YES
+   ```
 
 Running
 =======
 
-`service caster start`, or start the `/usr/local/sbin/caster` binary.
+**FreeBSD:** `service caster start`
+
+**Linux (direct):** `/usr/local/sbin/caster -d`
+
+**Linux (systemd):** Create `/etc/systemd/system/caster.service`:
+
+```ini
+[Unit]
+Description=Millipede NTRIP Caster
+After=network.target
+
+[Service]
+ExecStart=/usr/local/sbin/caster -d
+User=caster
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+```sh
+systemctl daemon-reload
+systemctl enable --now caster
+```
 
 Documentation
 =============
