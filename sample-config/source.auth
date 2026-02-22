@@ -3,3 +3,5 @@
 #
 # Format:
 #	MOUNTPOINT:username:password
+#
+admin:admin:admin
