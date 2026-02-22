@@ -55,8 +55,8 @@ static struct config default_config = {
 	.ntripsrv_default_write_timeout = 60,
 	.http_header_max_size = 8192,
 	.http_content_length_max = 4000000,
-	.access_log = "/var/log/millipede/access.log",
-	.log = "/var/log/millipede/caster.log",
+	.access_log = "/var/log/chilopod/access.log",
+	.log = "/var/log/chilopod/caster.log",
 	.log_level = LOG_INFO,
 	.admin_user = "admin",
 };

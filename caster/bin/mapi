@@ -7,7 +7,7 @@ import urllib.request
 import urllib.parse
 
 #
-# CLI tool to manipulate the Millipede API
+# CLI tool to manipulate the Chilopod API
 #
 
 confpath = os.path.join(os.getenv('HOME'), '.mapi.conf')
@@ -89,7 +89,7 @@ def main(argv):
   elif len(argv) == 2 and argv[1] == 'reload':
     print(mapi.reload())
   else:
-    print("""\nMillipede API tool
+    print("""\nChilopod API tool
 
 Usage:
 \tmapi drop id1 [id2 ...]

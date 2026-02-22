@@ -2,8 +2,8 @@
 </script>
 
 <div class="page">
-  <h2>Dashboard</h2>
-  <p class="soon">Overview and status — coming soon.</p>
+  <h2>Sources</h2>
+  <p class="soon">Live sources and sourcetable — coming soon.</p>
 </div>
 
 <style>

@@ -33,7 +33,7 @@
 
 <div class="login-wrap">
   <form class="login-box" onsubmit={login}>
-    <h1>Millipede</h1>
+    <h1>Chilopod</h1>
     <p class="subtitle">NTRIP Caster Administration</p>
 
     {#if error}
