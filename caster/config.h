@@ -317,6 +317,9 @@ struct config {
 	/* Auth key for incoming syncer API connections */
 	const char *syncer_auth;
 
+	/* Directory to serve static UI files from (GET /adm/ui/...) */
+	const char *ui_dir;
+
 	REFCNT;
 
 	/* Auth file entries */
