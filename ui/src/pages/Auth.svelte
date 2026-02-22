@@ -2,8 +2,8 @@
 </script>
 
 <div class="page">
-  <h2>Dashboard</h2>
-  <p class="soon">Overview and status — coming soon.</p>
+  <h2>Auth</h2>
+  <p class="soon">Source authentication management — coming soon.</p>
 </div>
 
 <style>

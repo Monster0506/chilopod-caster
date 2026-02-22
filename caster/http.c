@@ -35,7 +35,7 @@ int http_headers_add_auth(struct evkeyvalq *headers, const char *user, const cha
  * Decode Authorization: header.
  *
  * "Basic": RFC 2617 section 2, "Basic Authentication Scheme".
- * "internal": internal millipede auth token
+ * "internal": internal chilopod auth token
  */
 int http_decode_auth(char *value, int *scheme_basic, char **user, char **password) {
 	int r_scheme_basic = 0;

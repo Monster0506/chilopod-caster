@@ -1,13 +1,13 @@
 <script>
   import { isLoggedIn, clearCredentials } from './lib/api.js';
   import Login from './pages/Login.svelte';
-  import Dashboard from './pages/Dashboard.svelte';
+  import Shell from './components/Shell.svelte';
 
   let loggedIn = $state(isLoggedIn());
 </script>
 
 {#if loggedIn}
-  <Dashboard onLogout={() => { clearCredentials(); loggedIn = false; }} />
+  <Shell onLogout={() => { loggedIn = false; }} />
 {:else}
   <Login onLogin={() => { loggedIn = true; }} />
 {/if}

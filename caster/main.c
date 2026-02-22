@@ -10,7 +10,7 @@
 /*
  * Default configuration file name
  */
-static char *conf_filename = "/usr/local/etc/millipede/caster.yaml";
+static char *conf_filename = "/usr/local/etc/chilopod/caster.yaml";
 
 static void usage(char **argv) {
 	fprintf(stderr, "Usage: %s [-c config file] [-d][-t nthreads]\n"

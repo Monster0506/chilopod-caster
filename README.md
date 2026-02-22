@@ -1,11 +1,11 @@
-Millipede 0.8.2
+Chilopod 0.8.2
 ===============
 
 
-Millipede is a high-performance NTRIP caster written in C for the [Centipede-RTK](https://github.com/CentipedeRTK) project, a network of [RTK](https://en.wikipedia.org/wiki/Real-time_kinematic_positioning) bases based in France (see https://centipede-rtk.org).
+Chilopod is a high-performance NTRIP caster written in C for the [Centipede-RTK](https://github.com/CentipedeRTK) project, a network of [RTK](https://en.wikipedia.org/wiki/Real-time_kinematic_positioning) bases based in France (see https://centipede-rtk.org).
 
 
-Millipede uses libevent2 for minimal memory footprint.
+Chilopod uses libevent2 for minimal memory footprint.
 
 It can easily handle tens of thousands of NTRIP sessions on a minimal server.
 
@@ -62,7 +62,7 @@ npm run build
 The output in `ui/dist/` is what gets served at `/adm/ui/`. Copy it to the configured `ui_dir`:
 
 ```sh
-cp -r ui/dist/* /usr/local/etc/millipede/ui/
+cp -r ui/dist/* /usr/local/etc/chilopod/ui/
 ```
 
 Installation (Debian/Linux)
@@ -82,21 +82,21 @@ As root:
 
 3. Create config and log directories:
    ```sh
-   mkdir -p /usr/local/etc/millipede
-   mkdir -p /var/log/millipede
-   chown caster /var/log/millipede
+   mkdir -p /usr/local/etc/chilopod
+   mkdir -p /var/log/chilopod
+   chown caster /var/log/chilopod
    ```
 
 4. Copy sample config files:
    ```sh
-   cp sample-config/caster.yaml    /usr/local/etc/millipede/caster.yaml
-   cp sample-config/source.auth    /usr/local/etc/millipede/source.auth
-   cp sample-config/host.auth      /usr/local/etc/millipede/host.auth
-   cp sample-config/sourcetable.dat /usr/local/etc/millipede/sourcetable.dat
-   cp sample-config/blocklist      /usr/local/etc/millipede/blocklist
+   cp sample-config/caster.yaml    /usr/local/etc/chilopod/caster.yaml
+   cp sample-config/source.auth    /usr/local/etc/chilopod/source.auth
+   cp sample-config/host.auth      /usr/local/etc/chilopod/host.auth
+   cp sample-config/sourcetable.dat /usr/local/etc/chilopod/sourcetable.dat
+   cp sample-config/blocklist      /usr/local/etc/chilopod/blocklist
    ```
 
-5. Edit `/usr/local/etc/millipede/caster.yaml` and `/usr/local/etc/millipede/source.auth` for your setup (see Configuration Reference below).
+5. Edit `/usr/local/etc/chilopod/caster.yaml` and `/usr/local/etc/chilopod/source.auth` for your setup (see Configuration Reference below).
 
 6. Run the caster:
    ```sh
@@ -121,21 +121,21 @@ As root:
 
 3. Create config and log directories:
    ```sh
-   mkdir -p /usr/local/etc/millipede
-   mkdir -p /var/log/millipede
-   chown caster /var/log/millipede
+   mkdir -p /usr/local/etc/chilopod
+   mkdir -p /var/log/chilopod
+   chown caster /var/log/chilopod
    ```
 
 4. Copy sample config files:
    ```sh
-   cp sample-config/caster.yaml     /usr/local/etc/millipede/caster.yaml
-   cp sample-config/source.auth     /usr/local/etc/millipede/source.auth
-   cp sample-config/host.auth       /usr/local/etc/millipede/host.auth
-   cp sample-config/sourcetable.dat /usr/local/etc/millipede/sourcetable.dat
-   cp sample-config/blocklist       /usr/local/etc/millipede/blocklist
+   cp sample-config/caster.yaml     /usr/local/etc/chilopod/caster.yaml
+   cp sample-config/source.auth     /usr/local/etc/chilopod/source.auth
+   cp sample-config/host.auth       /usr/local/etc/chilopod/host.auth
+   cp sample-config/sourcetable.dat /usr/local/etc/chilopod/sourcetable.dat
+   cp sample-config/blocklist       /usr/local/etc/chilopod/blocklist
    ```
 
-5. Edit `/usr/local/etc/millipede/caster.yaml` and `/usr/local/etc/millipede/source.auth` for your setup (see Configuration Reference below).
+5. Edit `/usr/local/etc/chilopod/caster.yaml` and `/usr/local/etc/chilopod/source.auth` for your setup (see Configuration Reference below).
 
 6. Install the rc script and enable at boot:
    ```sh
@@ -154,7 +154,7 @@ Running
 
 ```ini
 [Unit]
-Description=Millipede NTRIP Caster
+Description=Chilopod NTRIP Caster
 After=network.target
 
 [Service]
