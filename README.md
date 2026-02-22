@@ -46,6 +46,25 @@ FreeBSD: `cd caster; make clean depend all`
 
 Debian: `cd caster; make clean all`
 
+Building the UI
+===============
+
+The pre-built UI is in `ui/dist/` and is committed to the repository -- no Node.js required to deploy.
+
+To rebuild after making changes to the UI source:
+
+```sh
+cd ui
+npm install
+npm run build
+```
+
+The output in `ui/dist/` is what gets served at `/adm/ui/`. Copy it to the configured `ui_dir`:
+
+```sh
+cp -r ui/dist/* /usr/local/etc/millipede/ui/
+```
+
 Installation (Debian/Linux)
 ==========================
 
@@ -83,7 +102,7 @@ As root:
    ```sh
    /usr/local/sbin/caster -d
    ```
-   Or create a systemd unit — see Running below.
+   Or create a systemd unit -- see Running below.
 
 Installation (FreeBSD)
 ======================
@@ -213,7 +232,7 @@ proxy:
 
 Path to the source authentication file (`source.auth`). Controls which username/password pairs are accepted for NTRIP source connections and admin access.
 
-Format — one entry per line: `MOUNTPOINT:username:password`
+Format -- one entry per line: `MOUNTPOINT:username:password`
 
 ```
 # Allow a specific source to push to MOUNT1
@@ -286,7 +305,7 @@ rtcm_filter:
     pass: 1005,1006,1033  # RTCM message types to pass through unchanged
     convert:
       - types: 1077,1087  # types to convert
-        conversion: msm7_4  # msm7_4 = MSM7→MSM4, msm7_3 = MSM7→MSM3
+        conversion: msm7_4  # msm7_4 = MSM7MSM4, msm7_3 = MSM7MSM3
 ```
 
 ### `syslog`
@@ -342,7 +361,7 @@ The username is looked up as a key in `source_auth_file`. The key used is the va
 
 ### `GET /adm/api/v1/net`
 
-Returns a JSON object of all current NTRIP connections — clients, sources, and admin sessions.
+Returns a JSON object of all current NTRIP connections -- clients, sources, and admin sessions.
 
 ```sh
 curl "http://localhost:2101/adm/api/v1/net?user=admin&password=admin"
@@ -426,7 +445,7 @@ These routes use HTTP Basic Auth and return the same data as their v1 equivalent
 
 ### Configuration
 
-`mapi` reads credentials from `~/.mapi.conf` — a JSON file with three keys:
+`mapi` reads credentials from `~/.mapi.conf` -- a JSON file with three keys:
 
 ```json
 {
@@ -444,7 +463,7 @@ cat > ~/.mapi.conf <<'EOF'
 EOF
 ```
 
-Change `baseurl` to point at your caster's address and port. TLS is supported — use `https://` if the caster is configured with a TLS listener.
+Change `baseurl` to point at your caster's address and port. TLS is supported -- use `https://` if the caster is configured with a TLS listener.
 
 ### Usage
 
