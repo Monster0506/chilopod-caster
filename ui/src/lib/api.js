@@ -27,9 +27,9 @@ export async function apiGet(endpoint) {
   return res.json();
 }
 
-export async function apiPost(endpoint) {
+export async function apiPost(endpoint, extra = {}) {
   const { user, password } = getCredentials();
-  const body = new URLSearchParams({ user, password });
+  const body = new URLSearchParams({ user, password, ...extra });
   const res = await fetch(`/adm/api/v1/${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
