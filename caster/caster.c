@@ -53,6 +53,7 @@ static void caster_log_cb(void *arg, struct gelf_entry *g, int level, const char
 static void caster_alog(void *arg, struct gelf_entry *g, int level, const char *fmt, va_list ap);
 static int caster_reload_fetchers(struct caster_state *this, struct config *config,
 	struct caster_dynconfig *olddyn, struct caster_dynconfig *newdyn);
+static void caster_clear_signals(struct caster_state *this);
 static int caster_start_fetchers(struct caster_state *this, struct config *config, struct caster_dynconfig *newdyn);
 static void dynconfig_free_fetchers(struct caster_dynconfig *this);
 static void listener_free(struct listener *this);
@@ -195,9 +196,52 @@ dynconfig_free_callback(struct config *config) {
 	config->dyn = NULL;
 }
 
+/*
+ * Free all dynamic structures from the caster structure.
+ */
+static void _caster_common_free(struct caster_state *this) {
+	if (this->joblist != NULL) joblist_free(this->joblist);
+	if (this->livesources != NULL) livesource_table_free(this->livesources);
+	if (this->nodes != NULL) nodes_free(this->nodes);
+
+	if (this->ntrips.ipcount != NULL) hash_table_free(this->ntrips.ipcount);
+	if (this->rtcm_cache != NULL) hash_table_free(this->rtcm_cache);
+
+	evdns_base_free(this->dns_base, 1);
+
+	for (int i = 0; i < this->nbase; i++)
+		event_base_free(this->base[i]);
+	free(this->base);
+
+	if (this->ssl_client_ctx != NULL)
+		SSL_CTX_free(this->ssl_client_ctx);
+
+	P_RWLOCK_WRLOCK(&this->sourcetablestack.lock);
+	struct sourcetable *s;
+	while ((s = TAILQ_FIRST(&this->sourcetablestack.list))) {
+		TAILQ_REMOVE_HEAD(&this->sourcetablestack.list, next);
+		sourcetable_decref(s);
+	}
+	P_RWLOCK_UNLOCK(&this->sourcetablestack.lock);
+
+	P_RWLOCK_DESTROY(&this->sourcetablestack.lock);
+	P_RWLOCK_DESTROY(&this->quotalock);
+	P_RWLOCK_DESTROY(&this->rtcm_lock);
+	P_RWLOCK_DESTROY(&this->ntrips.lock);
+	P_RWLOCK_DESTROY(&this->ntrips.free_lock);
+	P_RWLOCK_DESTROY(&this->configlock);
+	P_MUTEX_DESTROY(&this->configreload);
+	strfree(this->config_dir);
+	strfree((char *)this->config_file);
+	if (this->config)
+		config_decref(this->config);
+	libevent_global_shutdown();
+	free(this);
+}
+
 static struct caster_state *
 caster_new(const char *config_file, int nbase) {
-	int err = 0;
+	int r1 = 0, r2 = 0;
 	struct caster_state *this = (struct caster_state *)calloc(1, sizeof(struct caster_state));
 	if (this == NULL)
 		return this;
@@ -212,76 +256,68 @@ caster_new(const char *config_file, int nbase) {
 		free(this);
 		return NULL;
 	}
+
+	P_RWLOCK_INIT(&this->sourcetablestack.lock, NULL);
+	P_RWLOCK_INIT(&this->ntrips.lock, NULL);
+	P_RWLOCK_INIT(&this->ntrips.free_lock, NULL);
+	P_RWLOCK_INIT(&this->rtcm_lock, NULL);
+	P_RWLOCK_INIT(&this->quotalock, NULL);
+	P_RWLOCK_INIT(&this->configlock, NULL);
+	P_MUTEX_INIT(&this->configreload, NULL);
+
 	this->nbase = nbase;
 	atomic_store(&this->basecounter, 0);
 	for (int i = 0; i < this->nbase; i++) {
 		base = event_base_new();
 		if (!base) {
-			err = 1;
 			fprintf(stderr, "Could not initialize libevent!\n");
-			break;
+			goto cancel;
 		}
 		this->base[i] = base;
-	}
-	if (err) {
-		for (int i = 0; i < this->nbase; i++)
-			if (this->base[i] != NULL)
-				event_base_free(this->base[i]);
-		free(this->base);
-		free(this);
-		return NULL;
-	}
-
-	dns_base = evdns_base_new(this->base[0], 1);
-	if (!dns_base) {
-		fprintf(stderr, "Could not initialize dns_base!\n");
-		return NULL;
 	}
 
 	this->ssl_client_ctx = SSL_CTX_new(TLS_client_method());
 	if (this->ssl_client_ctx == NULL) {
 		ERR_print_errors_cb(caster_tls_log_cb, this);
-		return NULL;
+		goto cancel;
 	}
 	SSL_CTX_set_verify(this->ssl_client_ctx, SSL_VERIFY_PEER, NULL);
 	if (SSL_CTX_set_default_verify_paths(this->ssl_client_ctx) != 1) {
 		ERR_print_errors_cb(caster_tls_log_cb, this);
-		return NULL;
+		goto cancel;
+	}
+
+	dns_base = evdns_base_new(this->base[0], 1);
+	this->dns_base = dns_base;
+	if (!dns_base) {
+		fprintf(stderr, "Could not initialize dns_base!\n");
+		goto cancel;
 	}
 
 	gethostname(this->hostname, sizeof(this->hostname));
 	this->livesources = livesource_table_new(this->hostname, &this->start_date);
 	this->nodes = nodes_new();
 
-	P_RWLOCK_INIT(&this->ntrips.lock, NULL);
-	P_RWLOCK_INIT(&this->ntrips.free_lock, NULL);
-	P_RWLOCK_INIT(&this->rtcm_lock, NULL);
 	this->ntrips.next_id = 1;
 
-	P_RWLOCK_INIT(&this->quotalock, NULL);
 	this->ntrips.ipcount = hash_table_new(509, NULL);
 
 	// Used for access to config and reload serializing
 	atomic_store(&this->config_gen, 1);
-	P_RWLOCK_INIT(&this->configlock, NULL);
-	P_MUTEX_INIT(&this->configreload, NULL);
-
-	P_RWLOCK_INIT(&this->sourcetablestack.lock, NULL);
 
 	atomic_init(&this->config, NULL);
 
 	char *abs_config_path = realpath(config_file, NULL);
 	if (abs_config_path == NULL) {
 		fprintf(stderr, "Error: can't determine absolute path for config file %s\n", config_file);
-		err = 1;
 		this->config_dir = NULL;
 		this->config_file = mystrdup(config_file);
 		if (this->config_file == NULL)
-			err = 1;
+			goto cancel;
 	} else {
 		this->config_file = mystrdup(abs_config_path);
 		if (this->config_file == NULL)
-			err = 1;
+			goto cancel;
 		char *last_slash = strrchr(abs_config_path, '/');
 		if (last_slash) {
 			if (last_slash == abs_config_path)
@@ -295,26 +331,20 @@ caster_new(const char *config_file, int nbase) {
 
 	this->joblist = threads ? joblist_new(this) : NULL;
 
-	int r1 = log_init(&this->flog, NULL, &caster_log_cb, -1, -1, -1, -1, this);
-	int r2 = log_init(&this->alog, NULL, &caster_alog, 0, -1, -1, -1, this);
+	r1 = log_init(&this->flog, NULL, &caster_log_cb, -1, -1, -1, -1, this);
+	r2 = log_init(&this->alog, NULL, &caster_alog, 0, -1, -1, -1, this);
 
-	if (err || r1 < 0 || r2 < 0 || !this->config_dir
+	if (r1 < 0 || r2 < 0 || this->config_dir == NULL
 	    || (threads && this->joblist == NULL)
 	    || this->ntrips.ipcount == NULL
 	    || this->livesources == NULL
 		|| this->nodes == NULL) {
-		if (this->joblist) joblist_free(this->joblist);
-		if (r1 < 0) log_free(&this->flog);
-		if (r2 < 0) log_free(&this->alog);
-		if (this->ntrips.ipcount) hash_table_free(this->ntrips.ipcount);
-		if (this->livesources) livesource_table_free(this->livesources);
-		if (this->nodes) nodes_free(this->nodes);
-		strfree(this->config_dir);
-		free(this);
-		return NULL;
+		/* Special case for logs, as the cancel: routine can't know whether or not to call log_free() */
+		log_free(&this->flog);
+		log_free(&this->alog);
+		goto cancel;
 	}
 
-	this->dns_base = dns_base;
 	TAILQ_INIT(&this->ntrips.queue);
 	TAILQ_INIT(&this->ntrips.free_queue);
 	this->ntrips.n = 0;
@@ -323,6 +353,10 @@ caster_new(const char *config_file, int nbase) {
 	this->hostname[sizeof(this->hostname)-1] = '\0';
 	TAILQ_INIT(&this->sourcetablestack.list);
 	return this;
+
+cancel:
+	_caster_common_free(this);
+	return NULL;
 }
 
 static int caster_reload_syncers(struct caster_state *this, struct config *config, struct caster_dynconfig *olddyn, struct caster_dynconfig *newdyn) {
@@ -418,6 +452,9 @@ static int caster_start_graylog(struct caster_state *this, struct config *new_co
 	return 0;
 }
 
+/*
+ * Stop all caster activity, then free the structures.
+ */
 void caster_free(struct caster_state *this) {
 	if (this->config) {
 		/* Stop accepting incoming connections */
@@ -438,51 +475,10 @@ void caster_free(struct caster_state *this) {
 	if (threads)
 		jobs_stop_threads(this->joblist);
 
-	if (this->signalhup_event)
-		event_free(this->signalhup_event);
-	if (this->signalint_event)
-		event_free(this->signalint_event);
-	if (this->signalterm_event)
-		event_free(this->signalterm_event);
-
-	if (this->joblist) joblist_free(this->joblist);
-	livesource_table_free(this->livesources);
-	nodes_free(this->nodes);
-
-	hash_table_free(this->ntrips.ipcount);
-	hash_table_free(this->rtcm_cache);
-
-	evdns_base_free(this->dns_base, 1);
-
-	for (int i = 0; i < this->nbase; i++)
-		event_base_free(this->base[i]);
-	free(this->base);
-
-	SSL_CTX_free(this->ssl_client_ctx);
-
-	P_RWLOCK_WRLOCK(&this->sourcetablestack.lock);
-	struct sourcetable *s;
-	while ((s = TAILQ_FIRST(&this->sourcetablestack.list))) {
-		TAILQ_REMOVE_HEAD(&this->sourcetablestack.list, next);
-		sourcetable_decref(s);
-	}
-	P_RWLOCK_UNLOCK(&this->sourcetablestack.lock);
-
-	P_RWLOCK_DESTROY(&this->sourcetablestack.lock);
-	P_RWLOCK_DESTROY(&this->quotalock);
-	P_RWLOCK_DESTROY(&this->rtcm_lock);
-	P_RWLOCK_DESTROY(&this->ntrips.lock);
-	P_RWLOCK_DESTROY(&this->ntrips.free_lock);
-	P_RWLOCK_DESTROY(&this->configlock);
-	P_MUTEX_DESTROY(&this->configreload);
+	caster_clear_signals(this);
 	log_free(&this->flog);
 	log_free(&this->alog);
-	strfree(this->config_dir);
-	strfree((char *)this->config_file);
-	if (this->config)
-		config_decref(this->config);
-	libevent_global_shutdown();
-	free(this);
+	_caster_common_free(this);
 }
 
 /*
@@ -929,6 +925,15 @@ void event_log_redirect(int severity, const char *msg) {
 		logfmt(&caster->flog, LOG_INFO, "%s", msg);
 	else
 		fprintf(stderr, "%s\n", msg);
+}
+
+static void caster_clear_signals(struct caster_state *this) {
+	if (this->signalhup_event)
+		event_free(this->signalhup_event);
+	if (this->signalint_event)
+		event_free(this->signalint_event);
+	if (this->signalterm_event)
+		event_free(this->signalterm_event);
 }
 
 static int caster_set_signals(struct caster_state *this) {
