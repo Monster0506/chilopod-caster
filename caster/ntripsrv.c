@@ -60,8 +60,9 @@ send_server_reply(struct ntrip_state *this, struct evbuffer *ev,
 	msg = htc->message;
 
 	firstword = (this->client_version == 1 && firstword && this->user_agent_ntrip)?firstword:"HTTP/1.1";
-	struct tm *t = gmtime(&tstamp);
-	strftime(date, sizeof date, "%a, %d %b %Y %H:%M:%S GMT", t);
+	struct tm t;
+	gmtime_r(&tstamp, &t);
+	strftime(date, sizeof date, "%a, %d %b %Y %H:%M:%S GMT", &t);
 
 	len = evbuffer_add_printf(ev, "%s %d %s\r\n%sDate: %s\r\n", firstword, status_code, msg, server_headers, date);
 	if (len > 0) sent += len;
