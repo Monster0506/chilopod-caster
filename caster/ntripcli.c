@@ -64,7 +64,7 @@ static char *ntripcli_http_request_str(struct ntrip_state *st,
 		return NULL;
 	}
 
-	int hlen = 0;
+	size_t hlen = 0;
 	TAILQ_FOREACH(np, &headers, next) {
 		// lengths of key + value + ": " + "\r\n"
 		hlen += strlen(np->key) + strlen(np->value) + 4;
@@ -81,7 +81,7 @@ static char *ntripcli_http_request_str(struct ntrip_state *st,
 		strfree(host_port);
 		return NULL;
 	}
-	sprintf(r, format, method, uri);
+	snprintf(r, s, format, method, uri);
 
 	ntrip_log(st, LOG_DEBUG, "Method %s", r);
 	display_headers(st, &headers);
