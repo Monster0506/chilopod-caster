@@ -186,7 +186,7 @@ struct mime_content *sourcetable_get(struct sourcetable *this) {
 	 * Compute string size for the final sourcetable.
 	 */
 
-	int len = strlen(this->header)+17;
+	size_t len = strlen(this->header)+17;
 
 	struct element *e;
 	struct hash_iterator hi;
@@ -291,7 +291,7 @@ static int _sourcetable_add_unlocked(struct sourcetable *this, const char *sourc
 				sourcetable_entry);
 		}
 	} else {
-		int new_len = strlen(this->header) + strlen(sourcetable_entry) + 3;
+		size_t new_len = strlen(this->header) + strlen(sourcetable_entry) + 3;
 		char *s = (char *)strrealloc(this->header, new_len);
 		if (s == NULL)
 			return -1;
