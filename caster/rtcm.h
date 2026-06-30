@@ -69,7 +69,7 @@ int rtcm_packet_handle(struct ntrip_state *st);
  */
 static inline unsigned short rtcm_get_type(struct packet *p) {
 	unsigned char *d = p->data;
-	return (p->is_rtcm) ? getbits(d+3, 0, 12) : -1;
+	return (p->rtcm_state != PACKET_RAW) ? getbits(d+3, 0, 12) : -1;
 }
 
 #endif

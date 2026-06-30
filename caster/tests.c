@@ -524,7 +524,7 @@ static int test_msm7_msm4() {
 			fail++;
 			printf("FAIL on %d: bad checksum\n", tl->type7);
 		}
-		p7->is_rtcm = 1;
+		p7->rtcm_state = PACKET_RTCM_CHECKED;
 		struct packet *p = rtcm_convert_msm7(p7, 4);
 		if (p == NULL) {
 			fail++;

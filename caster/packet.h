@@ -8,13 +8,19 @@
 
 struct ntrip_state;
 
+enum packet_state {
+	PACKET_RAW,
+	PACKET_RTCM_UNCHECKED,
+	PACKET_RTCM_CHECKED
+};
+
 /*
  * A raw packet.
  * Variable-length structure, varies according to packet size.
  */
 struct packet {
 	_Atomic int refcnt;
-	int is_rtcm;		// Checked to be a valid RTCM packet
+	enum packet_state rtcm_state;
 	size_t datalen;
 	unsigned char data[];
 };
