@@ -352,12 +352,13 @@ parse_header(char *line, char **key, char **val) {
 	*key = line;
 	*val = p;
 
-	// Strip whitespace at the end of the value
-	for (char *p2 = p + strlen(p) - 1; p2 >= p; p2--) {
-		if (*p2 != ' ' && *p2 != '\t')
-			break;
-		*p2 = '\0';
-	}
+	// Strip whitespace at the end of the value.
+	if (p[0])
+		for (char *p2 = p + strlen(p) - 1; p2 >= p; p2--) {
+			if (*p2 != ' ' && *p2 != '\t')
+				break;
+			*p2 = '\0';
+		}
 	return 1;
 }
 
