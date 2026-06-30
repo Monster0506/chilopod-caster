@@ -447,11 +447,13 @@ ntripcli_new(struct caster_state *caster, char *host, unsigned short port, int t
 		/* Set the Server Name Indication TLS extension, for virtual server handling */
 		if (SSL_set_tlsext_host_name(ssl, host) < 0) {
 			ERR_print_errors_cb(caster_tls_log_cb, caster);
+			SSL_free(ssl);
 			return NULL;
 		}
 		/* Set hostname for certificate verification. */
 		if (SSL_set1_host(ssl, host) != 1) {
 			ERR_print_errors_cb(caster_tls_log_cb, caster);
+			SSL_free(ssl);
 			return NULL;
 		}
 		SSL_set_verify(ssl, SSL_VERIFY_PEER, NULL);
@@ -470,6 +472,8 @@ ntripcli_new(struct caster_state *caster, char *host, unsigned short port, int t
 
 	if (bev == NULL) {
 		logfmt(&caster->flog, LOG_ERR, "Error constructing bufferevent in ntripcli_start!");
+		if (ssl != NULL)
+			SSL_free(ssl);
 		return NULL;
 	}
 	struct ntrip_state *st = ntrip_new(caster, bev, host, port, uri,
@@ -477,6 +481,8 @@ ntripcli_new(struct caster_state *caster, char *host, unsigned short port, int t
 	if (st == NULL) {
 		bufferevent_free(bev);
 		logfmt(&caster->flog, LOG_ERR, "Error constructing ntrip_state in ntripcli_start!");
+		if (ssl != NULL)
+			SSL_free(ssl);
 		return NULL;
 	}
 	st->type = type;
