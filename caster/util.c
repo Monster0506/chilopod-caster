@@ -59,7 +59,7 @@ char *path_join(const char *abs, const char **list) {
 		strcat(r, abs);
 	for (p = list; *p; p++) {
 		/* Separator needed but no trailing '/', add it */
-		if (p[0][1] && r[strlen(r)-1] != '/')
+		if (p[0][1] && (r[0] == '\0' || r[strlen(r)-1] != '/'))
 			strcat(r, "/");
 		/* Add the next element, removing any leading / */
 		strcat(r, p[0] + (p[0][0] == '/'));
