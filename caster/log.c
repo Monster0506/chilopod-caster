@@ -27,7 +27,7 @@ int log_init(struct log *this, const char *filename, log_cb_t log_cb,
 
 	this->logfile = NULL;
 	if (filename) {
-		this->logfile = fopen(filename, "a+");
+		this->logfile = fopen(filename, "a");
 		if (!this->logfile) {
 			fprintf(stderr, "Can't open log file %s: %s\n", filename, strerror(errno));
 			return -1;
@@ -40,7 +40,7 @@ int log_init(struct log *this, const char *filename, log_cb_t log_cb,
 
 int log_reopen(struct log *this, const char *filename,
 	int log_level, int graylog_level, int syslog_level, int syslog_facility) {
-	FILE *newfile =	fopen(filename, "a+");
+	FILE *newfile =	fopen(filename, "a");
 	if (!newfile) {
 		fprintf(stderr, "Can't reopen log file %s: %s\n", filename, strerror(errno));
 		return -1;
