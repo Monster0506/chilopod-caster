@@ -18,6 +18,7 @@
 #include "log.h"
 #include "nodes.h"
 #include "queue.h"
+#include "refcnt.h"
 #include "rtcm.h"
 #include "sourcetable.h"
 #include "syncer.h"
@@ -35,7 +36,7 @@ struct listener {
 	int tls;			// is TLS activated?
 	SSL_CTX *ssl_server_ctx;	// TLS context, certs etc.
 	char *hostname;			// hostname for TLS/SNI
-	_Atomic int refcnt;
+	REFCNT;
 };
 
 /* Structure passed to signal callback for caster termination */

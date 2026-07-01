@@ -108,8 +108,4 @@ static void sourceline_free(struct sourceline *this) {
 	free(this);
 }
 
-void sourceline_decref(struct sourceline *this) {
-	assert(this->refcnt > 0);
-	if (atomic_fetch_sub(&this->refcnt, 1) == 1)
-		sourceline_free(this);
-}
+REFCNT_DECREF_BODY(sourceline_decref, struct sourceline, sourceline_free);

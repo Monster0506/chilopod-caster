@@ -58,7 +58,7 @@ struct ntrip_task *ntrip_task_new(struct caster_state *caster,
 		return NULL;
 	}
 	memset(&this->start, 0, sizeof(this->start));
-	atomic_init(&this->refcnt, 1);
+	REFCNT_INIT(this);
 	this->port = port;
 	this->status_timeout = 0;		// only used with mimeq/task_send_next_request()
 	this->refresh_delay = refresh_delay;
@@ -444,16 +444,8 @@ static void ntrip_task_free(struct ntrip_task *this) {
 	free(this);
 }
 
-void ntrip_task_incref(struct ntrip_task *this) {
-	assert(this->refcnt > 0);
-	atomic_fetch_add(&this->refcnt, 1);
-}
-
-void ntrip_task_decref(struct ntrip_task *this) {
-	assert(this->refcnt > 0);
-	if (atomic_fetch_add_explicit(&this->refcnt, -1, memory_order_relaxed) == 1)
-		ntrip_task_free(this);
-}
+REFCNT_INCREF_BODY(ntrip_task_incref, struct ntrip_task);
+REFCNT_DECREF_BODY(ntrip_task_decref, struct ntrip_task, ntrip_task_free);
 
 void ntrip_task_reload(struct ntrip_task *this,
 	const char *host, unsigned short port, const char *uri, int tls,

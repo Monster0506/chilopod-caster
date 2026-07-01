@@ -135,7 +135,7 @@ struct livesource *livesource_new(char *mountpoint, enum livesource_type type, e
 	this->npackets = 0;
 	this->state = state;
 	this->type = type;
-	atomic_init(&this->refcnt, 1);
+	REFCNT_INIT(this);
 
 	P_RWLOCK_INIT(&this->lock, NULL);
 	return this;
@@ -201,16 +201,7 @@ static void livesource_end(struct livesource *this) {
 	P_RWLOCK_UNLOCK(&this->lock);
 }
 
-void livesource_decref(struct livesource *this) {
-	assert(this->refcnt > 0);
-	if (atomic_fetch_sub_explicit(&this->refcnt, 1, memory_order_relaxed) == 1)
-		livesource_free(this);
-}
-
-void livesource_incref(struct livesource *this) {
-	assert(this->refcnt > 0);
-	atomic_fetch_add_explicit(&this->refcnt, 1, memory_order_relaxed);
-}
+REFCNT_DECREF_BODY(livesource_decref, struct livesource, livesource_free);
 
 void livesource_set_state(struct livesource *this, struct caster_state *caster, enum livesource_state state) {
 	json_object *j = NULL;
@@ -505,7 +496,7 @@ static struct livesource *livesource_find_unlocked(struct caster_state *this, st
 		int r = hash_table_add(this->livesources->hash, mountpoint, np);
 		if (r == -2) {
 			/* Out of memory */
-			livesource_free(np);
+			livesource_decref(np);
 			return NULL;
 		}
 		assert(r != -1);

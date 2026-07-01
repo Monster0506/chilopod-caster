@@ -77,7 +77,7 @@ struct ntrip_state *ntrip_new(struct caster_state *caster, struct bufferevent *b
 		STAILQ_INIT(&this->jobq);
 	this->njobs = 0;
 	this->newjobs = 0;
-	atomic_init(&this->refcnt, 1);
+	REFCNT_INIT(this);
 	this->bev_freed = 0;
 	this->bev_close_on_free = 0;
 	this->bev = bev;
@@ -445,22 +445,13 @@ static void ntrip_deferred_free2(struct ntrip_state *this) {
  * Increment reference counter.
  * No lock needed.
  */
-void ntrip_incref(struct ntrip_state *this, char *orig) {
-	assert(this->refcnt > 0);
-	atomic_fetch_add(&this->refcnt, 1);
-}
+REFCNT_INCREF2_BODY(ntrip_incref, struct ntrip_state);
 
 /*
  * Decrement reference counter.
  * Required lock: ntrip_state
  */
-void ntrip_decref(struct ntrip_state *this, char *orig) {
-	assert(this->refcnt > 0);
-	if (atomic_fetch_sub(&this->refcnt, 1) == 1) {
-		assert(ntrip_get_state(this) == NTRIP_END);
-		ntrip_deferred_free(this, orig);
-	}
-}
+REFCNT_DECREF2_BODY(ntrip_decref, struct ntrip_state, ntrip_deferred_free);
 
 /*
  * Set ntrip_state in the NTRIP_END state (end of connection).
@@ -501,6 +492,7 @@ void ntrip_decref_end(struct ntrip_state *this, char *orig) {
  * Required lock: ntrip_state
  */
 static void ntrip_deferred_free(struct ntrip_state *this, char *orig) {
+	assert(ntrip_get_state(this) == NTRIP_END);
 	struct bufferevent *bev = this->bev;
 
 	bufferevent_disable(bev, EV_READ|EV_WRITE);

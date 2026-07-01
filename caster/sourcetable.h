@@ -6,6 +6,7 @@
 #include "caster.h"
 #include "hash.h"
 #include "queue.h"
+#include "refcnt.h"
 #include "sourceline.h"
 #include "util.h"
 
@@ -30,7 +31,7 @@ struct sourcetable {
 	int nvirtual;			// number of "virtual" entries
 	struct timeval fetch_time;              // time of fetch, if remote table
 	json_object *json_config;	// optional additional Json config
-	_Atomic int refcnt;
+	REFCNT;
 };
 TAILQ_HEAD (sourcetableq, sourcetable);
 
@@ -66,8 +67,6 @@ struct dist_table {
 struct sourcetable *sourcetable_read(struct caster_state *caster, const char *filename, int priority);
 struct sourcetable *sourcetable_new(const char *host, unsigned short port, int tls,
 	json_object *json_config);
-void sourcetable_incref(struct sourcetable *this);
-void sourcetable_decref(struct sourcetable *this);
 struct mime_content *sourcetable_get(struct sourcetable *this);
 json_object *sourcetable_json(struct sourcetable *this);
 void sourcetable_del_mountpoint(struct sourcetable *this, char *mountpoint);
@@ -87,5 +86,7 @@ struct sourcetable *stack_flatten_dist(struct caster_state *caster, sourcetable_
 struct sourcetable *stack_flatten(struct caster_state *caster, sourcetable_stack_t *this);
 struct mime_content *sourcetable_list_json(struct caster_state *caster, struct request *req);
 int sourcetable_update_execute(struct caster_state *caster, json_object *j);
+REFCNT_INCREF_DECL(sourcetable_incref, struct sourcetable);
+REFCNT_DECREF_DECL(sourcetable_decref, struct sourcetable);
 
 #endif

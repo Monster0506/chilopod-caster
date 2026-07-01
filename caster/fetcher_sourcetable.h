@@ -2,10 +2,11 @@
 #define __FETCHER_SOURCETABLE_H__
 
 #include "caster.h"
+#include "refcnt.h"
 #include "sourcetable.h"
 
 struct sourcetable_fetch_args {
-	_Atomic int refcnt;
+	REFCNT;
 	struct sourcetable *sourcetable;
 	int priority;			// priority in a sourcetable stack
 	struct ntrip_task *task;
@@ -19,8 +20,10 @@ struct sourcetable_fetch_args {
 struct sourcetable_fetch_args *fetcher_sourcetable_new(struct caster_state *caster,
 	const char *host, unsigned short port, int tls, int refresh_delay, int priority,
 	const char *json_filename, struct config *config);
-void fetcher_sourcetable_incref(struct sourcetable_fetch_args *this);
-void fetcher_sourcetable_decref(struct sourcetable_fetch_args *this);
+
+REFCNT_INCREF_DECL(fetcher_sourcetable_incref, struct sourcetable_fetch_args);
+REFCNT_DECREF_DECL(fetcher_sourcetable_decref, struct sourcetable_fetch_args);
+
 void fetcher_sourcetable_stop(struct sourcetable_fetch_args *this);
 void fetcher_sourcetable_reload(struct sourcetable_fetch_args *this, int refresh_delay, int sourcetable_priority);
 void fetcher_sourcetable_start(void *arg_cb, int n);

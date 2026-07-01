@@ -10,6 +10,7 @@
 #include "auth.h"
 #include "ip.h"
 #include "log.h"
+#include "refcnt.h"
 #include "rtcm.h"
 
 /*
@@ -316,7 +317,7 @@ struct config {
 	/* Auth key for incoming syncer API connections */
 	const char *syncer_auth;
 
-	_Atomic int refcnt;
+	REFCNT;
 
 	/* Auth file entries */
 	struct auth_entry *host_auth;
@@ -341,15 +342,7 @@ extern size_t backlog_evbuffer;
 struct config *config_parse(const char *filename, long long config_gen);
 void config_free(struct config *this);
 
-static inline void config_incref(struct config *this) {
-	assert(this->refcnt > 0);
-	atomic_fetch_add_explicit(&this->refcnt, 1, memory_order_relaxed);
-}
-
-static inline void config_decref(struct config *this) {
-	assert(this->refcnt > 0);
-	if (atomic_fetch_sub_explicit(&this->refcnt, 1, memory_order_relaxed) == 1)
-		config_free(this);
-}
+static inline REFCNT_INCREF_BODY(config_incref, struct config);
+static inline REFCNT_DECREF_BODY(config_decref, struct config, config_free);
 
 #endif

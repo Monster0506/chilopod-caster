@@ -5,6 +5,7 @@
 #include <sys/queue.h>
 
 #include "packet.h"
+#include "refcnt.h"
 #include "sourceline.h"
 
 enum livesource_state {
@@ -51,7 +52,7 @@ struct livesource {
 	int npackets;
 	enum livesource_state state;
 	enum livesource_type type;
-	_Atomic int refcnt;
+	REFCNT;
 };
 
 /*
@@ -105,8 +106,8 @@ int livesource_connected(struct ntrip_state *st, char *mountpoint);
 int livesource_exists(struct caster_state *this, char *mountpoint, pos_t *mountpoint_pos);
 struct livesource *livesource_find_on_demand(struct caster_state *this, struct ntrip_state *st, char *mountpoint, pos_t *mountpoint_pos, int on_demand, int sourceline_on_demand, enum livesource_state *new_state);
 int livesource_find_and_subscribe(struct caster_state *caster, struct ntrip_state *st, char *mountpoint, pos_t *mountpoint_pos, int on_demand, int sourceline_on_demand);
-void livesource_decref(struct livesource *this);
-void livesource_incref(struct livesource *this);
+static inline REFCNT_INCREF_BODY(livesource_incref, struct livesource);
+REFCNT_DECREF_DECL(livesource_decref, struct livesource);
 void livesource_set_state(struct livesource *this, struct caster_state *caster, enum livesource_state state);
 void livesource_add_subscriber(struct ntrip_state *st, struct livesource *this, void *arg1);
 void livesource_del_subscriber(struct ntrip_state *st);

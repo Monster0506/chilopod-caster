@@ -5,6 +5,7 @@
 #include <stdatomic.h>
 
 #include "conf.h"
+#include "refcnt.h"
 
 struct ntrip_state;
 
@@ -19,7 +20,7 @@ enum packet_state {
  * Variable-length structure, varies according to packet size.
  */
 struct packet {
-	_Atomic int refcnt;
+	REFCNT;
 	enum packet_state rtcm_state;
 	size_t datalen;
 	unsigned char data[];
@@ -30,15 +31,7 @@ struct packet *packet_new(size_t len_raw);
 struct packet *packet_new_from_string(const char *s);
 int packet_send(struct packet *packet, struct ntrip_state *st, time_t t);
 
-static inline void packet_incref(struct packet *packet) {
-	assert(packet->refcnt > 0);
-	atomic_fetch_add(&packet->refcnt, 1);
-}
-
-static inline void packet_decref(struct packet *packet) {
-	assert(packet->refcnt > 0);
-	if (atomic_fetch_add_explicit(&packet->refcnt, -1, memory_order_relaxed) == 1)
-		free((void *)packet);
-}
+static inline REFCNT_INCREF_BODY(packet_incref, struct packet);
+static inline REFCNT_DECREF_BODY(packet_decref, struct packet, free);
 
 #endif

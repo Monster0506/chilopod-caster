@@ -57,8 +57,8 @@ static void caster_clear_signals(struct caster_state *this);
 static int caster_start_fetchers(struct caster_state *this, struct config *config, struct caster_dynconfig *newdyn);
 static void dynconfig_free_fetchers(struct caster_dynconfig *this);
 static void listener_free(struct listener *this);
-static void listener_incref(struct listener *this);
-static void listener_decref(struct listener *this);
+static REFCNT_INCREF_DECL(listener_incref, struct listener);
+static REFCNT_DECREF_DECL(listener_decref, struct listener);
 
 void caster_log_error(struct caster_state *this, char *orig) {
 	char s[256];
@@ -557,7 +557,7 @@ static struct listener *listener_new(struct caster_state *this, struct config_bi
 	listener->tls = config->tls;
 	listener->ssl_server_ctx = NULL;
 	listener->hostname = NULL;
-	atomic_init(&listener->refcnt, 1);
+	REFCNT_INIT(listener);
 
 	if (config->tls && config->tls_full_certificate_chain && config->tls_private_key) {
 		if (listener_setup_tls(listener, config) < 0) {
@@ -587,14 +587,8 @@ static void listener_free(struct listener *this) {
 	free(this);
 }
 
-static void listener_incref(struct listener *this) {
-	atomic_fetch_add(&this->refcnt, 1);
-}
-
-static void listener_decref(struct listener *this) {
-	if (atomic_fetch_add_explicit(&this->refcnt, -1, memory_order_relaxed) == 1)
-		listener_free(this);
-}
+static REFCNT_INCREF_BODY(listener_incref, struct listener);
+static REFCNT_DECREF_BODY(listener_decref, struct listener, listener_free);
 
 /*
  * Configure/reconfigure listening ports, reusing already existing sockets if possible.

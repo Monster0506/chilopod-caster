@@ -468,7 +468,7 @@ struct config *config_parse(const char *filename, long long config_gen) {
 		return NULL;
 	}
 	this->gen = config_gen;
-	atomic_init(&this->refcnt, 1);
+	REFCNT_INIT(this);
 
 #define	DEFAULT_ASSIGN(this, field)		{if (!(this)->field) {(this)->field = default_config.field;}}
 /* Special for string fields, to avoid a crash at free() */

@@ -7,6 +7,7 @@
 
 #include "conf.h"
 #include "ntrip_common.h"
+#include "refcnt.h"
 
 enum task_state {
 	TASK_INIT,
@@ -18,7 +19,7 @@ enum task_state {
  * Descriptor for a regularly scheduled outgoing connection task.
  */
 struct ntrip_task {
-	_Atomic int refcnt;
+	REFCNT;
 
 	/* Host, port, whether to use TLS */
 	char *host;
@@ -124,8 +125,8 @@ struct ntrip_task *ntrip_task_new(struct caster_state *caster,
 	const char *host, unsigned short port, const char *uri, int tls, int refresh_delay,
 	size_t bulk_max_size, size_t queue_max_size, const char *type, const char *drainfilename);
 void ntrip_task_ack_pending(struct ntrip_task *this);
-void ntrip_task_incref(struct ntrip_task *this);
-void ntrip_task_decref(struct ntrip_task *this);
+REFCNT_INCREF_DECL(ntrip_task_incref, struct ntrip_task);
+REFCNT_DECREF_DECL(ntrip_task_decref, struct ntrip_task);
 struct ntrip_state *ntrip_task_clear_get_st(struct ntrip_task *this, int getref);
 void ntrip_task_clear_st(struct ntrip_task *this);
 enum task_state ntrip_task_get_state(struct ntrip_task *this);

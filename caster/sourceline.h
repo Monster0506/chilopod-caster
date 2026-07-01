@@ -5,6 +5,7 @@
 #include <stdatomic.h>
 
 #include "queue.h"
+#include "refcnt.h"
 #include "util.h"
 
 /*
@@ -21,18 +22,15 @@ struct sourceline {
 	char *host;
 	unsigned short port;
 	int tls;
-	_Atomic int refcnt;
+	REFCNT;
 };
 TAILQ_HEAD (sourcelineq, sourceline);
 
 struct sourceline *sourceline_new(const char *host, unsigned short port, int tls, const char *key, const char *value);
 struct sourceline *sourceline_new_parse(const char *entry, const char *caster, unsigned short port, int tls, int priority, int on_demand);
 
-static inline void sourceline_incref(struct sourceline *this) {
-	assert(this->refcnt > 0);
-	atomic_fetch_add(&this->refcnt, 1);
-}
+static inline REFCNT_INCREF_BODY(sourceline_incref, struct sourceline);
+REFCNT_DECREF_DECL(sourceline_decref, struct sourceline);
 
-void sourceline_decref(struct sourceline *this);
 
 #endif

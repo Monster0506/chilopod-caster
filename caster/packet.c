@@ -7,7 +7,7 @@
 struct packet *packet_new(size_t len_raw) {
 	struct packet *this = (struct packet *)malloc(sizeof(struct packet) + len_raw);
 	this->datalen = len_raw;
-	atomic_init(&this->refcnt, 1);
+	REFCNT_INIT(this);
 	this->rtcm_state = PACKET_RAW;
 	return this;
 }

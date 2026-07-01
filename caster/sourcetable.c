@@ -147,7 +147,7 @@ struct sourcetable *sourcetable_new(const char *host, unsigned short port, int t
 	this->json_config = json_config;
 	if (json_config)
 		json_object_get(json_config);
-	atomic_store(&this->refcnt, 1);
+	REFCNT_INIT(this);
 	return this;
 }
 
@@ -164,16 +164,8 @@ static void sourcetable_free(struct sourcetable *this) {
 	free(this);
 }
 
-void sourcetable_incref(struct sourcetable *this) {
-	assert(this->refcnt > 0);
-	atomic_fetch_add(&this->refcnt, 1);
-}
-
-void sourcetable_decref(struct sourcetable *this) {
-	assert(this->refcnt > 0);
-	if (atomic_fetch_add_explicit(&this->refcnt, -1, memory_order_relaxed) == 1)
-		sourcetable_free(this);
-}
+REFCNT_INCREF_BODY(sourcetable_incref, struct sourcetable);
+REFCNT_DECREF_BODY(sourcetable_decref, struct sourcetable, sourcetable_free);
 
 /*
  * Return sourcetable as a string.

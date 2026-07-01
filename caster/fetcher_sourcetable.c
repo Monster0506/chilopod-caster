@@ -58,7 +58,7 @@ struct sourcetable_fetch_args *fetcher_sourcetable_new(struct caster_state *cast
 
 	this->sourcetable = NULL;
 	this->priority = priority;
-	this->refcnt = 1;
+	REFCNT_INIT(this);
 	return this;
 }
 
@@ -80,16 +80,8 @@ static void fetcher_sourcetable_free(struct sourcetable_fetch_args *this) {
 	free(this);
 }
 
-void fetcher_sourcetable_incref(struct sourcetable_fetch_args *this) {
-	assert(this->refcnt > 0);
-	atomic_fetch_add(&this->refcnt, 1);
-}
-
-void fetcher_sourcetable_decref(struct sourcetable_fetch_args *this) {
-	assert(this->refcnt > 0);
-	if (atomic_fetch_sub(&this->refcnt, 1) == 1)
-		fetcher_sourcetable_free(this);
-}
+REFCNT_INCREF_BODY(fetcher_sourcetable_incref, struct sourcetable_fetch_args);
+REFCNT_DECREF_BODY(fetcher_sourcetable_decref, struct sourcetable_fetch_args, fetcher_sourcetable_free);
 
 void fetcher_sourcetable_stop(struct sourcetable_fetch_args *this) {
 	task_stop(this);
