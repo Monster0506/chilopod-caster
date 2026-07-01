@@ -44,7 +44,7 @@ int packet_send(struct packet *packet, struct ntrip_state *st, time_t t) {
 		ntrip_log(st, LOG_CRIT, "evbuffer_add_reference failed");
 		return -1;
 	}
-	st->last_send = t;
+	atomic_store(&st->last_send, time(NULL));
 	st->sent_bytes += packet->datalen;
 	return 0;
 }

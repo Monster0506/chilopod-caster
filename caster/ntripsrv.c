@@ -900,7 +900,7 @@ void ntripsrv_eventcb(struct bufferevent *bev, short events, void *arg)
 			 * recently sending data.
 			 */
 			if (ntrip_get_state(st) == NTRIP_WAIT_CLIENT_INPUT) {
-				int idle_time = time(NULL) - st->last_send;
+				int idle_time = time(NULL) - atomic_load(&st->last_send);
 				if (idle_time <= config->idle_max_delay) {
 					/* Re-enable read */
 					bufferevent_enable(bev, EV_READ);

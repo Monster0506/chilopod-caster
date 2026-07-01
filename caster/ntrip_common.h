@@ -191,7 +191,7 @@ struct ntrip_state {
 	struct ntrip_task *task;		// descriptor and callbacks for the current task
 	struct subscriber *subscription;	// current source subscription
 	char *uri;				// URI for requests
-	time_t last_send;			// last time a packet was sent to this client
+	_Atomic time_t last_send;		// last time a packet was sent to this client
 	json_object *node;			// node information from syncer client
 	char *syncer_id;			// livesource table id from remote syncer
 
