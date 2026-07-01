@@ -614,16 +614,19 @@ struct rtcm_info *rtcm_info_new() {
 	memset(&this->date1006, 0, sizeof(this->date1006));
 	this->copy1005 = NULL;
 	this->copy1006 = NULL;
+	REFCNT_INIT(this);
 	return this;
 }
 
-void rtcm_info_free(struct rtcm_info *this) {
+static void rtcm_info_free(struct rtcm_info *this) {
 	if (this->copy1005)
 		packet_decref(this->copy1005);
 	if (this->copy1006)
 		packet_decref(this->copy1006);
 	free(this);
 }
+
+REFCNT_DECREF_BODY(rtcm_info_decref, struct rtcm_info, rtcm_info_free);
 
 /*
  * Return a pointer to the most recent 1005 or 1006 packet, if any.

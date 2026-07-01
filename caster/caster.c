@@ -349,7 +349,7 @@ caster_new(const char *config_file, int nbase) {
 	TAILQ_INIT(&this->ntrips.free_queue);
 	this->ntrips.n = 0;
 	this->ntrips.nfree = 0;
-	this->rtcm_cache = hash_table_new(509, (void(*)(void *))rtcm_info_free);
+	this->rtcm_cache = hash_table_new(509, (void(*)(void *))rtcm_info_decref);
 	this->hostname[sizeof(this->hostname)-1] = '\0';
 	TAILQ_INIT(&this->sourcetablestack.list);
 	return this;

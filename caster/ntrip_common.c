@@ -344,6 +344,8 @@ static void _ntrip_common_free(struct ntrip_state *this) {
 	strfree(this->content_type);
 	strfree((char *)this->user_agent);
 	strfree(this->query_string);
+	if (this->rtcm_info != NULL)
+		rtcm_info_decref(this->rtcm_info);
 }
 
 /*
@@ -871,9 +873,12 @@ void ntrip_set_rtcm_cache(struct ntrip_state *st) {
 		assert(e != -1);
 		if (e == -2) {
 			/* Out of memory */
-			rtcm_info_free(rp);
+			rtcm_info_decref(rp);
+			rp = NULL;
 		}
 	}
+	if (rp != NULL)
+		rtcm_info_incref(rp);
 	st->rtcm_info = rp;
 	P_RWLOCK_UNLOCK(&st->caster->rtcm_lock);
 }
