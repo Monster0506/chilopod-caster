@@ -53,7 +53,7 @@ struct ntrip_state *ntrip_new(struct caster_state *caster, struct bufferevent *b
 	this->port = port;
 	time_t t = time(NULL);
 	this->last_useful = t;
-	this->last_send = t;
+	atomic_store(&this->last_send, t);
 	this->subscription = NULL;
 	this->server_version = 2;
 	this->client_version = 0;
