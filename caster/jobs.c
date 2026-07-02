@@ -22,7 +22,7 @@ struct joblist *joblist_new(struct caster_state *caster) {
 	struct joblist *this = (struct joblist *)malloc(sizeof(struct joblist));
 	if (this != NULL) {
 		if (pthread_cond_init(&this->condjob, NULL) != 0) {
-			caster_log_error(this->caster, "pthread_cond_init");
+			caster_log_error(caster, "pthread_cond_init");
 			free(this);
 			return NULL;
 		}
