@@ -98,22 +98,22 @@ struct ntrip_task *ntrip_task_new(struct caster_state *caster,
  * Protected access to clear the st pointer and
  * return a counted reference to its previous value, if not NULL.
  */
-struct ntrip_state *ntrip_task_clear_get_st(struct ntrip_task *this, int getref) {
+struct ntrip_state *ntrip_task_clear_get_st(struct ntrip_task *this) {
 	struct ntrip_state *rst;
 	P_RWLOCK_WRLOCK(&this->st_lock);
-	rst = getref ? this->st : NULL;
-	if (this->st != NULL) {
-		this->st->task = NULL;
-		if (!rst)
-			ntrip_decref(this->st, "ntrip_task_clear_st");
+	rst = this->st;
+	if (rst != NULL) {
+		rst->task = NULL;
+		this->st = NULL;
 	}
-	this->st = NULL;
 	P_RWLOCK_UNLOCK(&this->st_lock);
 	return rst;
 }
 
 void ntrip_task_clear_st(struct ntrip_task *this) {
-	ntrip_task_clear_get_st(this, 0);
+	struct ntrip_state *st = ntrip_task_clear_get_st(this);
+	if (st != NULL)
+		ntrip_decref(st, "ntrip_task_clear_st");
 }
 
 /*
@@ -181,7 +181,7 @@ void ntrip_task_stop(struct ntrip_task *this) {
 	}
 	P_RWLOCK_UNLOCK(&this->mimeq_lock);
 
-	struct ntrip_state *st = ntrip_task_clear_get_st(this, 1);
+	struct ntrip_state *st = ntrip_task_clear_get_st(this);
 
 	if (st) {
 		logfmt(&this->caster->flog, LOG_INFO, "Stopping %s (%p) from %s:%d", this->type, this, this->host, this->port);

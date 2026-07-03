@@ -127,7 +127,7 @@ struct ntrip_task *ntrip_task_new(struct caster_state *caster,
 void ntrip_task_ack_pending(struct ntrip_task *this);
 REFCNT_INCREF_DECL(ntrip_task_incref, struct ntrip_task);
 REFCNT_DECREF_DECL(ntrip_task_decref, struct ntrip_task);
-struct ntrip_state *ntrip_task_clear_get_st(struct ntrip_task *this, int getref);
+struct ntrip_state *ntrip_task_clear_get_st(struct ntrip_task *this);
 void ntrip_task_clear_st(struct ntrip_task *this);
 enum task_state ntrip_task_get_state(struct ntrip_task *this);
 int ntrip_task_start(struct ntrip_task *this, void *reschedule_arg, struct livesource *livesource, int persistent,
