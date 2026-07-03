@@ -69,8 +69,9 @@ static char *ntripcli_http_request_str(struct ntrip_state *st,
 		// lengths of key + value + ": " + "\r\n"
 		hlen += strlen(np->key) + strlen(np->value) + 4;
 	}
-	if (st->task)
-		TAILQ_FOREACH(np, &st->task->headers, next)
+	struct ntrip_task *task = ntrip_state_task(st);
+	if (task)
+		TAILQ_FOREACH(np, &task->headers, next)
 			hlen += strlen(np->key) + strlen(np->value) + 4;
 
 	char *format = "%s %s HTTP/1.1";
@@ -85,8 +86,8 @@ static char *ntripcli_http_request_str(struct ntrip_state *st,
 
 	ntrip_log(st, LOG_DEBUG, "Method %s", r);
 	display_headers(st, &headers);
-	if (st->task)
-		display_headers(st, &st->task->headers);
+	if (task)
+		display_headers(st, &task->headers);
 
 	strcat(r, "\r\n");
 	TAILQ_FOREACH(np, &headers, next) {
@@ -95,8 +96,8 @@ static char *ntripcli_http_request_str(struct ntrip_state *st,
 		strcat(r, np->value);
 		strcat(r, "\r\n");
 	}
-	if (st->task)
-		TAILQ_FOREACH(np, &st->task->headers, next) {
+	if (task)
+		TAILQ_FOREACH(np, &task->headers, next) {
 			strcat(r, np->key);
 			strcat(r, ": ");
 			strcat(r, np->value);
@@ -192,8 +193,9 @@ void ntripcli_readcb(struct bufferevent *bev, void *arg) {
 				bufferevent_set_timeouts(bev, &read_timeout, NULL);
 			}
 
-			if (st->task && st->task->status_cb)
-				st->task->status_cb(st->task->status_cb_arg, status_code, st->task->cb_arg2);
+			struct ntrip_task *task = ntrip_state_task(st);
+			if (task && task->status_cb)
+				task->status_cb(task->status_cb_arg, status_code, task->cb_arg2);
 
 			if (st->status_code == 200)
 				ntrip_set_state(st, NTRIP_WAIT_HTTP_HEADER);
@@ -221,7 +223,7 @@ void ntripcli_readcb(struct bufferevent *bev, void *arg) {
 					ntrip_set_state(st, NTRIP_REGISTER_SOURCE);
 					struct timeval read_timeout = { config->source_read_timeout, 0 };
 					bufferevent_set_timeouts(bev, &read_timeout, NULL);
-				} else if (st->task && st->task->line_cb)
+				} else if (ntrip_state_task(st) && ntrip_state_task(st)->line_cb)
 					ntrip_set_state(st, NTRIP_WAIT_CALLBACK_LINE);
 				else if (st->content_length)
 					ntrip_set_state(st, NTRIP_WAIT_SERVER_CONTENT);
@@ -229,7 +231,7 @@ void ntripcli_readcb(struct bufferevent *bev, void *arg) {
 					ntrip_set_state(st, NTRIP_WAIT_CHUNKED_CONTENT);
 				else if (st->connection_keepalive && st->received_keepalive) {
 					ntrip_set_state(st, NTRIP_IDLE_CLIENT);
-					if (st->task)
+					if (ntrip_state_task(st))
 						ntrip_task_send_next_request(st);
 				} else {
 					ntrip_log(st, LOG_INFO, "closing connection due to connection_keepalive=%d received_keepalive=%d",
@@ -283,7 +285,8 @@ void ntripcli_readcb(struct bufferevent *bev, void *arg) {
 			/* Add 1 for the trailing LF or CR LF. We don't care for the exact count. */
 			st->received_bytes += len + 1;
 
-			if (st->task && st->task->line_cb(st, st->task->line_cb_arg, line, st->task->cb_arg2)) {
+			struct ntrip_task *task = ntrip_state_task(st);
+			if (task && task->line_cb(st, task->line_cb_arg, line, task->cb_arg2)) {
 				st->task = NULL;
 				end = 1;
 			}
@@ -299,7 +302,7 @@ void ntripcli_readcb(struct bufferevent *bev, void *arg) {
 			}
 			if (st->content_length == st->content_done && st->connection_keepalive && st->received_keepalive) {
 				ntrip_set_state(st, NTRIP_IDLE_CLIENT);
-				if (st->task)
+				if (ntrip_state_task(st))
 					ntrip_task_send_next_request(st);
 			} else
 				end = 1;
@@ -307,7 +310,7 @@ void ntripcli_readcb(struct bufferevent *bev, void *arg) {
 			if (st->chunk_state == CHUNK_END) {
 				if (st->connection_keepalive && st->received_keepalive) {
 					ntrip_set_state(st, NTRIP_IDLE_CLIENT);
-					if (st->task)
+					if (ntrip_state_task(st))
 						ntrip_task_send_next_request(st);
 				} else
 					end = 1;
@@ -377,7 +380,8 @@ void ntripcli_writecb(struct bufferevent *bev, void *arg)
 void ntripcli_send_request(struct ntrip_state *st, struct mime_content *m, int send_mime) {
 	int len;
 	struct evbuffer *output = bufferevent_get_output(st->bev);
-	char *s = ntripcli_http_request_str(st, st->task?st->task->method:"GET", st->host, st->port, st->uri, 2, NULL, m);
+	struct ntrip_task *task = ntrip_state_task(st);
+	char *s = ntripcli_http_request_str(st, task?task->method:"GET", st->host, st->port, st->uri, 2, NULL, m);
 	if (s) {
 		len = strlen(s);
 		st->sent_bytes += len + ((m && send_mime) ? m->len : 0);
@@ -403,8 +407,10 @@ void ntripcli_eventcb(struct bufferevent *bev, short events, void *arg) {
 		ntrip_set_peeraddr(st, NULL, 0);
 		ntrip_set_localaddr(st);
 		ntrip_log(st, LOG_INFO, "Connected to %s:%d for %s", st->host, st->port, st->uri);
-		if (st->task && st->task->connect_cb)
-			st->task->connect_cb(st);
+
+		struct ntrip_task *task = ntrip_state_task(st);
+		if (task && task->connect_cb)
+			task->connect_cb(st);
 		else
 			ntripcli_send_request(st, NULL, 0);
 		return;

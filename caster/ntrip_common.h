@@ -72,6 +72,7 @@ enum ntrip_rtcm_state {
  */
 
 struct rtcm_info;
+struct ntrip_task;
 
 struct ntrip_state {
 	/*
@@ -288,6 +289,15 @@ static inline enum ntrip_session_state ntrip_get_state(struct ntrip_state *this)
 
 static inline void ntrip_set_state(struct ntrip_state *this, enum ntrip_session_state state) {
 	atomic_store(&this->state, state);
+}
+
+/*
+ * Read st->task. The caller must hold the ntrip_state's bufferevent lock
+ * (bev), which excludes the task-side writer (ntrip_task_clear_get_st also
+ * acquires bev). Returns the current task pointer or NULL.
+ */
+static inline struct ntrip_task *ntrip_state_task(struct ntrip_state *st) {
+	return st->task;
 }
 
 #endif

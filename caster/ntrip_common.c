@@ -648,9 +648,10 @@ void ntrip_notify_close(struct ntrip_state *st) {
 	if (!st->client)
 		return;
 
-	if (st->task != NULL) {
+	if (ntrip_state_task(st) != NULL) {
+		struct ntrip_task *task = ntrip_state_task(st);
 		/* Notify the callback the transfer is over, and failed. */
-		st->task->end_cb(0, st->task->end_cb_arg, st->task->cb_arg2);
+		task->end_cb(0, task->end_cb_arg, task->cb_arg2);
 		st->task = NULL;
 	}
 }

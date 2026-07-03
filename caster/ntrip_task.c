@@ -28,10 +28,11 @@ _ntrip_task_restart_cb(int fd, short what, void *arg) {
  * Called on a successful connection.
  */
 static void connect_cb(struct ntrip_state *st){
+	struct ntrip_task *task = ntrip_state_task(st);
 	/* Reinitialize exponential backoff */
-	st->task->current_retry_delay = st->task->refresh_delay;
+	task->current_retry_delay = task->refresh_delay;
 
-	if (st->task->use_mimeq) {
+	if (task->use_mimeq) {
 		ntrip_set_state(st, NTRIP_IDLE_CLIENT);
 		ntrip_task_send_next_request(st);
 	} else
@@ -330,7 +331,7 @@ void ntrip_task_queue(struct ntrip_task *this, struct packet *packet) {
 void ntrip_task_send_next_request(struct ntrip_state *st) {
 	struct evbuffer *output = bufferevent_get_output(st->bev);
 	struct mime_content *m;
-	struct ntrip_task *task = st->task;
+	struct ntrip_task *task = ntrip_state_task(st);
 	assert(ntrip_get_state(st) == NTRIP_IDLE_CLIENT);
 	assert(task->pending == 0);
 	size_t size = 0;
@@ -376,7 +377,7 @@ void ntrip_task_send_next_request(struct ntrip_state *st) {
 				ntrip_decref_end(st, "ntrip_task_send_next_request");
 				return;
 			}
-			st->task->pending++;
+			task->pending++;
 			n--;
 		}
 	} else {
@@ -400,7 +401,7 @@ void ntrip_task_send_next_request(struct ntrip_state *st) {
 	 * Will close if it times out.
 	 * In other cases, just keep the connection idle.
 	 */
-	struct timeval read_timeout = { st->task->pending ? st->task->status_timeout : 0 };
+	struct timeval read_timeout = { task->pending ? task->status_timeout : 0 };
 	bufferevent_set_timeouts(st->bev, &read_timeout, NULL);
 	P_RWLOCK_UNLOCK(&task->mimeq_lock);
 }
