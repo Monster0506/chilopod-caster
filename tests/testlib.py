@@ -121,7 +121,7 @@ STR;C63;C63;RTCM3;1004,1005,1006,1008,1012,1019,1020,1033,1042,1045,1046,1077,10
 """
 
 class SourceServer(object):
-  def __init__(self, host, mountpoint, raw_headers=b''):
+  def __init__(self, host, mountpoint, raw_headers=''):
     self.err = 0
     self.naccept = 0
     self.host = host
