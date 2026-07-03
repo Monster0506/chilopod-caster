@@ -129,6 +129,12 @@ REFCNT_INCREF_DECL(ntrip_task_incref, struct ntrip_task);
 REFCNT_DECREF_DECL(ntrip_task_decref, struct ntrip_task);
 struct ntrip_state *ntrip_task_clear_get_st(struct ntrip_task *this);
 void ntrip_task_clear_st(struct ntrip_task *this);
+
+/*
+ * Return a counted reference to the ntrip_state, or NULL.
+ */
+struct ntrip_state *ntrip_task_get_st_ref(struct ntrip_task *this);
+
 enum task_state ntrip_task_get_state(struct ntrip_task *this);
 int ntrip_task_start(struct ntrip_task *this, void *reschedule_arg, struct livesource *livesource, int persistent,
 	struct config *new_config);

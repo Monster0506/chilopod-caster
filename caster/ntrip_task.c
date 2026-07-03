@@ -119,7 +119,7 @@ void ntrip_task_clear_st(struct ntrip_task *this) {
 /*
  * Return a counted reference to the ntrip_state, or NULL.
  */
-static struct ntrip_state *ntrip_task_get_st_ref(struct ntrip_task *this) {
+struct ntrip_state *ntrip_task_get_st_ref(struct ntrip_task *this) {
 	P_RWLOCK_RDLOCK(&this->st_lock);
 	struct ntrip_state *st = this->st;
 	if (st != NULL)

@@ -59,9 +59,11 @@ void syncer_queue(struct syncer *this, char *json) {
 	}
 
 	for (int i = 0; i < this->ntask; i++) {
-		if (this->task[i]->st)
-			ntrip_log(this->task[i]->st, LOG_DEBUG, "syncer %d queueing %.80s", i, json);
-		else
+		struct ntrip_state *st = ntrip_task_get_st_ref(this->task[i]);
+		if (st) {
+			ntrip_log(st, LOG_DEBUG, "syncer %d queueing %.80s", i, json);
+			ntrip_decref(st, "syncer_queue");
+		} else
 			logfmt(&this->caster->flog, LOG_DEBUG, "syncer %d queueing %.80s (not running)", i, json);
 		ntrip_task_queue(this->task[i], packet);
 	}
