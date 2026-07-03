@@ -4,9 +4,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <json-c/json_object.h>
+
 #include "bitfield.h"
 #include "conf.h"
 #include "ip.h"
+#include "json.h"
 #include "log.h"
 #include "rtcm.h"
 #include "util.h"
@@ -708,6 +711,84 @@ static void sourcetable_test(struct sourcetable *sourcetable) {
 }
 #endif
 
+/*
+ * Regression test for json_get_authentication mountpoint lookup.
+ */
+static int test_json_get_authentication() {
+	int fail = 0;
+	puts("json_get_authentication");
+
+	struct authtest {
+		const char *mountpoint;
+		int expect_found;
+		const char *expect_user;
+		const char *expect_password;
+	};
+
+	/* Build: {"sources": {"MNT1": {"user":"u1","password":"p1"},
+	 *                       "MNT2": {"user":"u2","password":"p2"},
+	 *                       "*":    {"user":"du","password":"dp"}}}
+	 */
+	json_object *config = json_object_new_object();
+	json_object *sources = json_object_new_object();
+
+	json_object *m1 = json_object_new_object();
+	json_object_object_add(m1, "user", json_object_new_string("u1"));
+	json_object_object_add(m1, "password", json_object_new_string("p1"));
+	json_object_object_add(sources, "MNT1", m1);
+
+	json_object *m2 = json_object_new_object();
+	json_object_object_add(m2, "user", json_object_new_string("u2"));
+	json_object_object_add(m2, "password", json_object_new_string("p2"));
+	json_object_object_add(sources, "MNT2", m2);
+
+	json_object *def = json_object_new_object();
+	json_object_object_add(def, "user", json_object_new_string("du"));
+	json_object_object_add(def, "password", json_object_new_string("dp"));
+	json_object_object_add(sources, "*", def);
+
+	json_object_object_add(config, "sources", sources);
+
+	struct authtest testlist[] = {
+		{ "MNT1", 1, "u1", "p1" },
+		{ "MNT2", 1, "u2", "p2" },	/* would fail with the mountpoint lookup bug */
+		{ "OTHER", 1, "du", "dp" },	/* falls back to "*" */
+		{ "*",     1, "du", "dp" },
+		{ NULL, 0, NULL, NULL }
+	};
+
+	for (struct authtest *t = testlist; t->mountpoint; t++) {
+		const char *user = NULL, *password = NULL;
+		int r = json_get_authentication(config, t->mountpoint, &user, &password);
+		if (r != t->expect_found
+			|| (t->expect_found && (user == NULL || strcmp(user, t->expect_user)))
+			|| (t->expect_found && (password == NULL || strcmp(password, t->expect_password)))) {
+			fail++;
+			printf("\nFAIL: mountpoint=\"%s\" got (%d, %s, %s) expected (%d, %s, %s)\n",
+				t->mountpoint, r, user, password,
+				t->expect_found, t->expect_user, t->expect_password);
+		} else
+			putchar('.');
+	}
+	putchar('\n');
+
+	/* Config without a "sources" key: nothing to look up. */
+	json_object *empty = json_object_new_object();
+	const char *user = NULL, *password = NULL;
+	if (json_get_authentication(empty, "MNT1", &user, &password) == 0
+		&& user == NULL && password == NULL)
+		putchar('.');
+	else {
+		fail++;
+		printf("\nFAIL: no sources key expected (0, NULL, NULL)\n");
+	}
+	putchar('\n');
+
+	json_object_put(empty);
+	json_object_put(config);
+	return fail;
+}
+
 int main(int argc, const char **argv) {
 	int fail = 0;
 	const char *test_dir;
@@ -726,6 +807,7 @@ int main(int argc, const char **argv) {
 	fail += test_ip_convert();
 	fail += test_msm7_msm4();
 	fail += timeval_from_iso_date_test();
+	fail += test_json_get_authentication();
 	fail += file_parse_test(test_dir);
 	return fail != 0;
 }
