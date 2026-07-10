@@ -599,7 +599,20 @@ void ntripsrv_readcb(struct bufferevent *bev, void *arg) {
 						 * Find both a relevant source line and a live source (actually live or on-demand).
 						 */
 						sourceline = stack_find_mountpoint(st->caster, &st->caster->sourcetablestack, mountpoint);
-						subscribe_ok = livesource_find_and_subscribe(st->caster, st, mountpoint, NULL, 1, sourceline?sourceline->on_demand:0);
+
+						//
+						// Don't subscribe to a livesource with the same name as the sourceline
+						// if the latter indicates the source is virtual: this would cause an assertion failure later
+						// in livesource_add_subcriber().
+						//
+						// This can happen after a sourcetable reload, where a configuration changes a given mountpoint
+						// from a regular source to a virtual source, including when using wildcards, ahd the previous
+						// livesource is still active.
+						//
+						if (sourceline == NULL || !sourceline->virtual)
+							subscribe_ok = livesource_find_and_subscribe(st->caster, st, mountpoint, NULL, 1, sourceline?sourceline->on_demand:0);
+						else
+							subscribe_ok = 0;
 					}
 
 					/*

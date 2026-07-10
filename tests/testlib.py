@@ -80,7 +80,11 @@ class ClientStream(object):
     self._thr.start()
   def _run(self):
     sclient = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-    sclient.connect(self.host)
+    try:
+      sclient.connect(self.host)
+    except ConnectionRefusedError:
+      self.err += 1
+      return
     sclient.sendall(self.req)
 
     if self.firstline:
