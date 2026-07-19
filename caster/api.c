@@ -1,4 +1,6 @@
 #include <netinet/tcp.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <json-c/json_object.h>
@@ -174,6 +176,109 @@ struct mime_content *api_drop_json(struct caster_state *caster, struct request *
 	char *s = mystrdup(result);
 	struct mime_content *m = mime_new(s, -1, "application/json", 1);
 	return m;
+}
+
+/*
+ * Reject characters that would corrupt the line-based auth/sourcetable file format.
+ */
+static int field_is_safe(const char *s) {
+	for (const char *p = s; *p; p++)
+		if (*p == ';' || *p == ':' || *p == '\n' || *p == '\r')
+			return 0;
+	return 1;
+}
+
+static struct mime_content *api_error_json(const char *msg) {
+	char result[256];
+	snprintf(result, sizeof result, "{\"result\": -1, \"error\": \"%s\"}\n", msg);
+	char *s = mystrdup(result);
+	return mime_new(s, -1, "application/json", 1);
+}
+
+/*
+ * Add a new mountpoint: append an entry to source_auth_file and a STR line to
+ * sourcetable_file, then reload -- the form-based equivalent of the manual
+ * "edit source.auth + sourcetable.dat, then POST /api/v1/reload" workflow.
+ */
+struct mime_content *api_add_source_json(struct caster_state *caster, struct request *req) {
+	struct config *config = req->st->config;
+	char *end;
+
+	char *mountpoint = (char *)hash_table_get(req->hash, "mountpoint");
+	/*
+	 * Named source_password, not password, since this route's admin auth check
+	 * already consumes the "password" key from the same request body.
+	 */
+	char *password = (char *)hash_table_get(req->hash, "source_password");
+	if (!mountpoint || !*mountpoint || !password || !*password)
+		return api_error_json("mountpoint and source_password are required");
+	if (!field_is_safe(mountpoint) || !field_is_safe(password))
+		return api_error_json("invalid characters in mountpoint or source_password");
+
+	struct sourceline *existing = stack_find_local_mountpoint(caster, &caster->sourcetablestack, mountpoint);
+	if (existing) {
+		sourceline_decref(existing);
+		return api_error_json("mountpoint already exists");
+	}
+
+	char *identifier = (char *)hash_table_get(req->hash, "identifier");
+	char *format = (char *)hash_table_get(req->hash, "format");
+	char *format_details = (char *)hash_table_get(req->hash, "format_details");
+	char *carrier = (char *)hash_table_get(req->hash, "carrier");
+	char *nav_system = (char *)hash_table_get(req->hash, "nav_system");
+	char *network = (char *)hash_table_get(req->hash, "network");
+	char *country = (char *)hash_table_get(req->hash, "country");
+	char *lat = (char *)hash_table_get(req->hash, "lat");
+	char *lon = (char *)hash_table_get(req->hash, "lon");
+	char *solution = (char *)hash_table_get(req->hash, "solution");
+	char *generator = (char *)hash_table_get(req->hash, "generator");
+	char *bitrate = (char *)hash_table_get(req->hash, "bitrate");
+
+	if (!identifier || !*identifier) identifier = mountpoint;
+	if (!format || !*format) format = "RTCM3";
+	if (!format_details) format_details = "";
+	if (!carrier || !*carrier) carrier = "0";
+	if (!nav_system || !*nav_system) nav_system = "GPS";
+	if (!network || !*network) network = "NONE";
+	if (!country || !*country) country = "NONE";
+	if (!lat || !*lat) lat = "0.000";
+	if (!lon || !*lon) lon = "0.000";
+	if (!solution || !*solution) solution = "0";
+	if (!generator || !*generator) generator = "unknown";
+	if (!bitrate || !*bitrate) bitrate = "0";
+
+	const char *fields[] = {identifier, format, format_details, carrier, nav_system,
+		network, country, lat, lon, solution, generator, bitrate};
+	for (unsigned i = 0; i < sizeof(fields)/sizeof(fields[0]); i++)
+		if (!field_is_safe(fields[i]))
+			return api_error_json("invalid characters in a sourcetable field");
+
+	strtod(lat, &end);
+	if (end == lat || *end)
+		return api_error_json("lat must be a number");
+	strtod(lon, &end);
+	if (end == lon || *end)
+		return api_error_json("lon must be a number");
+
+	FILE *authf = fopen_absolute(caster->config_dir, config->source_auth_filename, "a");
+	if (authf == NULL)
+		return api_error_json("cannot open source_auth_file");
+	fprintf(authf, "%s:%s:%s\n", mountpoint, mountpoint, password);
+	fclose(authf);
+
+	FILE *tablef = fopen_absolute(caster->config_dir, config->sourcetable_filename, "a");
+	if (tablef == NULL)
+		return api_error_json("cannot open sourcetable_file");
+	fprintf(tablef, "STR;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;0;%s;%s;none;N;N;%s;\n",
+		mountpoint, identifier, format, format_details, carrier, nav_system,
+		network, country, lat, lon, solution, generator, bitrate);
+	fclose(tablef);
+
+	int r = caster_reload(caster);
+	char result[40];
+	snprintf(result, sizeof result, "{\"result\": %d}\n", r);
+	char *s = mystrdup(result);
+	return mime_new(s, -1, "application/json", 1);
 }
 
 struct mime_content *api_sync_json(struct caster_state *caster, struct request *req) {
