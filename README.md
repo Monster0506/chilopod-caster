@@ -39,7 +39,7 @@ Features
 Requirements
 ============
 
-Building Chilopod from source requires:
+Building Chilopod from source requires a C compiler and `make`, plus:
 
 | Library | Minimum version |
 |---|---|
@@ -48,11 +48,17 @@ Building Chilopod from source requires:
 | json-c | 0.16 |
 | openssl | 3.0.15 |
 
-Install them with your platform's package manager:
+A minimal Debian/FreeBSD install has neither a compiler nor these libraries by default -- install them with your platform's package manager:
 
 FreeBSD: `sudo pkg install libevent libcyaml json-c`
 
-Debian: `sudo apt install libcyaml-dev libevent-dev libjson-c-dev libssl-dev`
+Debian: `sudo apt install build-essential libcyaml-dev libevent-dev libjson-c-dev libssl-dev`
+
+You'll also want `curl` for the admin API examples throughout this README, and `python3` if you use `scripts/rtcm_bridge.py` (see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source)) -- neither ships on a minimal install either:
+
+```sh
+sudo apt install curl python3
+```
 
 Building
 ========
