@@ -279,6 +279,16 @@ Steps 2-4 below (registering the mountpoint and reloading) can be done in one ca
    ```
    Run it under whatever supervises long-lived processes on your system (systemd, a process manager, `nohup` + `&`, etc.) -- it runs forever, retrying on failure.
 
+   Some devices (e.g. Topcon receivers with a GRIL console) don't stream to a bare TCP connection -- they show a `login:`/`Password:` prompt first, and only start sending data once authenticated. Add `--remote-login-user` and `--remote-login-pass` for these; the bridge performs that login handshake once per (re)connection before relaying, and forwards any stream bytes that arrive bundled with the login confirmation instead of dropping them:
+   ```sh
+   python3 scripts/rtcm_bridge.py \
+     --remote-host <device-ip> --remote-port <device-port> \
+     --caster-host 127.0.0.1 --caster-port 2101 \
+     --mountpoint MOUNT1 --password <generated password> \
+     --remote-login-user <device-username> --remote-login-pass <device-password>
+   ```
+   Whether a device needs this, and what its accepted login messages will look like, is device-specific -- there's no way to tell without trying a bare connection first (see the "connection refused" troubleshooting note below for the alternative case, where nothing is listening at all).
+
 6. Verify it's live:
    ```sh
    curl "http://localhost:2101/adm/api/v1/net?user=admin&password=admin"       # look for type "source", mountpoint MOUNT1
