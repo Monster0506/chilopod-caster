@@ -281,6 +281,128 @@ struct mime_content *api_add_source_json(struct caster_state *caster, struct req
 	return mime_new(s, -1, "application/json", 1);
 }
 
+/*
+ * Rewrite a file, dropping lines whose delimited field at field_index equals
+ * value exactly (field 0 is whatever precedes the first separator).
+ * Returns the number of lines dropped, or -1 on I/O error.
+ */
+static int remove_matching_lines(const char *dir, const char *filename, char sep, int field_index, const char *value) {
+	char *path = joinpath(dir, filename);
+	if (path == NULL)
+		return -1;
+
+	FILE *in = fopen(path, "r");
+	if (in == NULL) {
+		strfree(path);
+		return -1;
+	}
+
+	size_t tmp_len = strlen(path) + 5;
+	char *tmp_path = (char *)strmalloc(tmp_len);
+	snprintf(tmp_path, tmp_len, "%s.tmp", path);
+	FILE *out = fopen(tmp_path, "w");
+	if (out == NULL) {
+		fclose(in);
+		strfree(path);
+		strfree(tmp_path);
+		return -1;
+	}
+
+	char *line = NULL;
+	size_t linecap = 0;
+	ssize_t linelen;
+	int removed = 0;
+	size_t vlen = strlen(value);
+
+	while ((linelen = getline(&line, &linecap, in)) >= 0) {
+		int idx = 0;
+		char *field_start = line;
+		char *field_end = NULL;
+		for (char *p = line; *p; p++) {
+			if (*p == sep) {
+				if (idx == field_index) {
+					field_end = p;
+					break;
+				}
+				idx++;
+				if (idx == field_index)
+					field_start = p + 1;
+			}
+		}
+		int is_match = field_end && (size_t)(field_end - field_start) == vlen
+			&& !strncmp(field_start, value, vlen);
+		if (is_match)
+			removed++;
+		else
+			fwrite(line, 1, linelen, out);
+	}
+	free(line);
+	fclose(in);
+	fclose(out);
+
+	if (rename(tmp_path, path) < 0)
+		removed = -1;
+
+	strfree(path);
+	strfree(tmp_path);
+	return removed;
+}
+
+/*
+ * Drop any active source connections pushing to the given mountpoint.
+ */
+static int drop_source_connections(struct caster_state *caster, const char *mountpoint) {
+	int r = 0;
+restart:
+	P_RWLOCK_WRLOCK(&caster->ntrips.lock);
+	struct ntrip_state *st;
+	TAILQ_FOREACH(st, &caster->ntrips.queue, nextg) {
+		if (strcmp(st->type, "source") || !st->mountpoint || strcmp(st->mountpoint, mountpoint))
+			continue;
+		bufferevent_lock(st->bev);
+		ntrip_notify_close(st);
+		ntrip_decref_end(st, "drop_source_connections");
+		r++;
+		bufferevent_unlock(st->bev);
+		P_RWLOCK_UNLOCK(&caster->ntrips.lock);
+		goto restart;
+	}
+	P_RWLOCK_UNLOCK(&caster->ntrips.lock);
+	return r;
+}
+
+/*
+ * Remove a mountpoint: drop its entries from source_auth_file and
+ * sourcetable_file, reload, and disconnect any active source pushing to it.
+ */
+struct mime_content *api_remove_source_json(struct caster_state *caster, struct request *req) {
+	struct config *config = req->st->config;
+	char *mountpoint = (char *)hash_table_get(req->hash, "mountpoint");
+
+	if (!mountpoint || !*mountpoint)
+		return api_error_json("mountpoint is required");
+	if (!field_is_safe(mountpoint))
+		return api_error_json("invalid characters in mountpoint");
+
+	int auth_removed = remove_matching_lines(caster->config_dir, config->source_auth_filename, ':', 0, mountpoint);
+	if (auth_removed < 0)
+		return api_error_json("cannot rewrite source_auth_file");
+
+	int str_removed = remove_matching_lines(caster->config_dir, config->sourcetable_filename, ';', 1, mountpoint);
+	if (str_removed < 0)
+		return api_error_json("cannot rewrite sourcetable_file");
+
+	if (auth_removed == 0 && str_removed == 0)
+		return api_error_json("mountpoint not found");
+
+	int dropped = drop_source_connections(caster, mountpoint);
+	int r = caster_reload(caster);
+	char result[80];
+	snprintf(result, sizeof result, "{\"result\": %d, \"dropped_connections\": %d}\n", r, dropped);
+	char *s = mystrdup(result);
+	return mime_new(s, -1, "application/json", 1);
+}
+
 struct mime_content *api_sync_json(struct caster_state *caster, struct request *req) {
 	const char *type = json_object_get_string(json_object_object_get(req->json, "type"));
 

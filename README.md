@@ -219,6 +219,8 @@ Adding a Raw RTCM3 TCP Source
 
 Chilopod's "source" side speaks the NTRIP `SOURCE`/`POST` push protocol. Some GNSS receivers (e.g. many Trimble base stations) instead offer a raw TCP socket that just emits RTCM3 bytes with no NTRIP handshake at all. To feed one of these into the caster as a mountpoint:
 
+Steps 2-4 below (registering the mountpoint and reloading) can be done in one call with [`POST /adm/api/v1/sources`](#post-admapiv1sources) instead, or from the Sources page in the admin UI (`/adm/ui/`) -- read on if you want to understand what that call actually does, or need to do it by hand.
+
 1. Pick a mountpoint name (e.g. `MOUNT1`) and generate a password:
    ```sh
    openssl rand -hex 12
@@ -456,6 +458,8 @@ All admin routes are under `/adm/`, served on whichever port(s) you configure in
 | GET | `/adm/api/v1/sourcetables` | Merged sourcetable |
 | POST | `/adm/api/v1/reload` | Reload configuration from disk |
 | POST | `/adm/api/v1/drop` | Drop a connection by ID |
+| POST | `/adm/api/v1/sources` | Add a mountpoint (writes source_auth_file + sourcetable_file, reloads) |
+| POST | `/adm/api/v1/sources/remove` | Remove a mountpoint and drop its active connection, if any |
 | POST | `/adm/api/v1/sync` | Internal cluster sync (token auth, not user/password) |
 
 ## Authentication
@@ -540,6 +544,24 @@ Drops a specific connection by ID. Send as `application/x-www-form-urlencoded`.
 ```sh
 curl -X POST "http://localhost:2101/adm/api/v1/drop" \
   --data "user=admin&password=admin&id=<connection-id>"
+```
+
+### `POST /adm/api/v1/sources`
+
+Adds a mountpoint: appends an entry to `source_auth_file` and a `STR` line to `sourcetable_file`, then reloads. The form-based equivalent of manually editing those files and calling `reload` -- see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source) for what each field means. `mountpoint` and `source_password` are required; `lat`/`lon` are required and must be numeric. Every other field is optional and defaults the same way the manual `STR` line does (e.g. `format` defaults to `RTCM3`, `generator` to `unknown`). Fails with `{"result": -1, "error": "..."}` if the mountpoint already exists or a field contains `;`, `:`, or a newline.
+
+```sh
+curl -X POST "http://localhost:2101/adm/api/v1/sources" \
+  --data "user=admin&password=admin&mountpoint=MOUNT1&source_password=secret&lat=41.5&lon=-81.5"
+```
+
+### `POST /adm/api/v1/sources/remove`
+
+Removes a mountpoint: deletes its entries from `source_auth_file` and `sourcetable_file`, drops any connection currently pushing to it, then reloads. Fails with `{"result": -1, "error": "mountpoint not found"}` if there's no matching entry.
+
+```sh
+curl -X POST "http://localhost:2101/adm/api/v1/sources/remove" \
+  --data "user=admin&password=admin&mountpoint=MOUNT1"
 ```
 
 ### `POST /adm/api/v1/sync`

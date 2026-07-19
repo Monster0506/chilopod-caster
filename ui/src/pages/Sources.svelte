@@ -8,6 +8,8 @@
   let showForm = $state(false);
   let submitting = $state(false);
   let formMsg = $state('');
+  let removing = $state(new Set());
+  let removeMsg = $state('');
 
   const blankForm = {
     mountpoint: '',
@@ -78,6 +80,23 @@
     }
   }
 
+  async function removeSource(mountpoint) {
+    if (!confirm(`Remove ${mountpoint}? This deletes its config and drops any active connection.`)) return;
+    removing = new Set([...removing, mountpoint]);
+    removeMsg = '';
+    try {
+      const res = await apiPost('sources/remove', { mountpoint });
+      removeMsg = res.result === 0
+        ? `Removed ${mountpoint}${res.dropped_connections ? ` (dropped ${res.dropped_connections} active connection)` : ''}.`
+        : (res.error ?? 'Failed to remove source.');
+      await fetchAll();
+    } catch (e) {
+      removeMsg = `Failed: ${e.message}`;
+    } finally {
+      removing = new Set([...removing].filter((x) => x !== mountpoint));
+    }
+  }
+
   $effect(() => {
     fetchAll();
     if (!autoRefresh) return;
@@ -130,6 +149,10 @@
     </form>
   {/if}
 
+  {#if removeMsg}
+    <p class="remove-msg">{removeMsg}</p>
+  {/if}
+
   {#if error}
     <p class="error">{error}</p>
   {:else if !table}
@@ -147,11 +170,12 @@
             <th>Position</th>
             <th>Status</th>
             <th>Received</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
           {#if entries.length === 0}
-            <tr><td colspan="7" class="empty">No sources configured.</td></tr>
+            <tr><td colspan="8" class="empty">No sources configured.</td></tr>
           {/if}
           {#each entries as [key, mnt] (key)}
             {@const live = liveInfo(key)}
@@ -171,6 +195,15 @@
                 {/if}
               </td>
               <td class="mono">{live ? formatBytes(live.received_bytes) : '—'}</td>
+              <td>
+                <button
+                  class="remove-btn"
+                  onclick={() => removeSource(key)}
+                  disabled={removing.has(key)}
+                >
+                  {removing.has(key) ? '…' : 'Remove'}
+                </button>
+              </td>
             </tr>
           {/each}
         </tbody>
@@ -296,6 +329,32 @@
     margin: 0.75rem 0 0;
     font-size: 0.78rem;
     color: #475569;
+  }
+
+  .remove-msg {
+    margin: 0 0 1rem;
+    font-size: 0.85rem;
+    color: #64748b;
+  }
+
+  .remove-btn {
+    padding: 0.25rem 0.6rem;
+    background: transparent;
+    border: 1px solid #7f1d1d;
+    border-radius: 4px;
+    color: #fca5a5;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 120ms;
+  }
+
+  .remove-btn:hover:not(:disabled) {
+    background: #7f1d1d33;
+  }
+
+  .remove-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .table-wrap {
