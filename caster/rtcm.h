@@ -10,6 +10,7 @@
 #include "hash.h"
 #include "packet.h"
 #include "refcnt.h"
+#include "util.h"
 
 struct ntrip_state;
 struct caster_dynconfig;
@@ -65,6 +66,8 @@ static inline REFCNT_INCREF_BODY(rtcm_info_incref, struct rtcm_info);
 REFCNT_DECREF_DECL(rtcm_info_decref, struct rtcm_info);
 struct packet *rtcm_info_pos_packet(struct rtcm_info *this, struct caster_state *caster);
 json_object *rtcm_info_json(struct rtcm_info *this);
+int rtcm_info_get_pos(struct rtcm_info *this, pos_t *pos);
+char *rtcm_info_get_nav_system(struct rtcm_info *this);
 int rtcm_packet_is_pos(struct packet *p);
 int rtcm_packet_handle(struct ntrip_state *st);
 

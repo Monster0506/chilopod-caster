@@ -10,6 +10,8 @@
   let formMsg = $state('');
   let removing = $state(new Set());
   let removeMsg = $state('');
+  let detecting = $state(new Set());
+  let detectMsg = $state('');
 
   const blankForm = {
     mountpoint: '',
@@ -97,6 +99,24 @@
     }
   }
 
+  async function detectTypes(mountpoint) {
+    detecting = new Set([...detecting, mountpoint]);
+    detectMsg = '';
+    try {
+      const res = await apiPost('sources/detect', { mountpoint });
+      const navNote = res.nav_system ? `, nav-system ${res.nav_system}` : '';
+      const posNote = res.lat != null ? `, position ${res.lat.toFixed(6)}, ${res.lon.toFixed(6)}` : '';
+      detectMsg = res.result === 0
+        ? `${mountpoint}: detected ${res.types}${navNote}${posNote}, updated.`
+        : `${mountpoint}: ${res.error ?? 'detection failed.'}`;
+      if (res.result === 0) await fetchAll();
+    } catch (e) {
+      detectMsg = `${mountpoint}: failed (${e.message}).`;
+    } finally {
+      detecting = new Set([...detecting].filter((x) => x !== mountpoint));
+    }
+  }
+
   $effect(() => {
     fetchAll();
     if (!autoRefresh) return;
@@ -132,8 +152,8 @@
         <label>Nav system <input bind:value={form.nav_system} /></label>
         <label>Network <input bind:value={form.network} /></label>
         <label>Country <input bind:value={form.country} /></label>
-        <label>Latitude <input required bind:value={form.lat} placeholder="41.5" /></label>
-        <label>Longitude <input required bind:value={form.lon} placeholder="-81.5" /></label>
+        <label>Latitude <input bind:value={form.lat} placeholder="41.5 (approximate is fine)" /></label>
+        <label>Longitude <input bind:value={form.lon} placeholder="-81.5 (approximate is fine)" /></label>
         <label>Solution <input bind:value={form.solution} /></label>
         <label>Generator <input bind:value={form.generator} placeholder="defaults to unknown" /></label>
         <label>Bitrate <input bind:value={form.bitrate} /></label>
@@ -144,13 +164,19 @@
       </div>
       <p class="hint">
         New mountpoints only appear below once a source actually connects and pushes data --
-        registering it here just makes the caster ready to accept the push.
+        registering it here just makes the caster ready to accept the push. Format details and
+        position don't need to be exact for RTCM3 sources -- an approximate lat/lon is fine,
+        Format details can be left blank, and "Detect" (once connected) fetches both from what
+        the caster actually decodes.
       </p>
     </form>
   {/if}
 
   {#if removeMsg}
     <p class="remove-msg">{removeMsg}</p>
+  {/if}
+  {#if detectMsg}
+    <p class="remove-msg">{detectMsg}</p>
   {/if}
 
   {#if error}
@@ -166,6 +192,7 @@
             <th>Mountpoint</th>
             <th>Identifier</th>
             <th>Format</th>
+            <th>Format details</th>
             <th>Nav system</th>
             <th>Position</th>
             <th>Status</th>
@@ -175,7 +202,7 @@
         </thead>
         <tbody>
           {#if entries.length === 0}
-            <tr><td colspan="8" class="empty">No sources configured.</td></tr>
+            <tr><td colspan="9" class="empty">No sources configured.</td></tr>
           {/if}
           {#each entries as [key, mnt] (key)}
             {@const live = liveInfo(key)}
@@ -183,6 +210,7 @@
               <td class="mono">{key}</td>
               <td>{strField(mnt.str, 2)}</td>
               <td class="mono">{strField(mnt.str, 3)}</td>
+              <td class="mono details">{strField(mnt.str, 4) || '—'}</td>
               <td class="mono">{strField(mnt.str, 6)}</td>
               <td class="mono">{mnt.lat.toFixed(4)}, {mnt.lon.toFixed(4)}</td>
               <td>
@@ -195,7 +223,17 @@
                 {/if}
               </td>
               <td class="mono">{live ? formatBytes(live.received_bytes) : '—'}</td>
-              <td>
+              <td class="actions">
+                {#if live && strField(mnt.str, 3) === 'RTCM3'}
+                  <button
+                    class="detect-btn"
+                    onclick={() => detectTypes(key)}
+                    disabled={detecting.has(key)}
+                    title="Fetch real decoded message types and station position from the live stream, and update this row to match"
+                  >
+                    {detecting.has(key) ? '…' : 'Detect'}
+                  </button>
+                {/if}
                 <button
                   class="remove-btn"
                   onclick={() => removeSource(key)}
@@ -335,6 +373,38 @@
     margin: 0 0 1rem;
     font-size: 0.85rem;
     color: #64748b;
+  }
+
+  .details {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .actions {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .detect-btn {
+    padding: 0.25rem 0.6rem;
+    background: transparent;
+    border: 1px solid #1e3a5f;
+    border-radius: 4px;
+    color: #93c5fd;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 120ms;
+  }
+
+  .detect-btn:hover:not(:disabled) {
+    background: #1e3a5f33;
+  }
+
+  .detect-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .remove-btn {

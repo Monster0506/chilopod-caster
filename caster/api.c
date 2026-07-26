@@ -403,6 +403,164 @@ struct mime_content *api_remove_source_json(struct caster_state *caster, struct 
 	return mime_new(s, -1, "application/json", 1);
 }
 
+/*
+ * Rewrite the sourcetable line for mountpoint (matched on field 1), replacing
+ * field target_field with new_value. Returns 1 if a line was updated, 0 if
+ * no matching line was found, -1 on I/O error.
+ */
+static int update_sourcetable_field(const char *dir, const char *filename, const char *mountpoint, int target_field, const char *new_value) {
+	char *path = joinpath(dir, filename);
+	if (path == NULL)
+		return -1;
+
+	FILE *in = fopen(path, "r");
+	if (in == NULL) {
+		strfree(path);
+		return -1;
+	}
+
+	size_t tmp_len = strlen(path) + 5;
+	char *tmp_path = (char *)strmalloc(tmp_len);
+	snprintf(tmp_path, tmp_len, "%s.tmp", path);
+	FILE *out = fopen(tmp_path, "w");
+	if (out == NULL) {
+		fclose(in);
+		strfree(path);
+		strfree(tmp_path);
+		return -1;
+	}
+
+	char *line = NULL;
+	size_t linecap = 0;
+	ssize_t linelen;
+	int updated = 0;
+	size_t mlen = strlen(mountpoint);
+
+	while ((linelen = getline(&line, &linecap, in)) >= 0) {
+		while (linelen > 0 && (line[linelen-1] == '\n' || line[linelen-1] == '\r'))
+			line[--linelen] = '\0';
+
+		int idx = 0;
+		char *field_start = line;
+		char *field_end = NULL;
+		for (char *p = line; *p; p++) {
+			if (*p == ';') {
+				if (idx == 1) {
+					field_end = p;
+					break;
+				}
+				idx++;
+				if (idx == 1)
+					field_start = p + 1;
+			}
+		}
+		int is_match = !updated && field_end && (size_t)(field_end - field_start) == mlen
+			&& !strncmp(field_start, mountpoint, mlen);
+
+		if (!is_match) {
+			fprintf(out, "%s\n", line);
+			continue;
+		}
+
+		int fidx = 0;
+		char *seg_start = line;
+		for (char *p = line; ; p++) {
+			if (*p == ';' || *p == '\0') {
+				if (fidx == target_field)
+					fprintf(out, "%s", new_value);
+				else
+					fwrite(seg_start, 1, p - seg_start, out);
+				if (*p == '\0')
+					break;
+				fputc(';', out);
+				fidx++;
+				seg_start = p + 1;
+			}
+		}
+		fputc('\n', out);
+		updated = 1;
+	}
+	free(line);
+	fclose(in);
+	fclose(out);
+
+	if (rename(tmp_path, path) < 0)
+		updated = -1;
+
+	strfree(path);
+	strfree(tmp_path);
+	return updated;
+}
+
+/*
+ * Look up what RTCM3 message types the caster has actually decoded for a
+ * mountpoint and update its sourcetable format-details, nav-system, and
+ * position fields to match -- the automated form of README's "go back and
+ * fix the placeholder STR line" step, for sources where the real message
+ * set can't be known in advance.
+ */
+struct mime_content *api_detect_source_json(struct caster_state *caster, struct request *req) {
+	struct config *config = req->st->config;
+	char *mountpoint = (char *)hash_table_get(req->hash, "mountpoint");
+
+	if (!mountpoint || !*mountpoint)
+		return api_error_json("mountpoint is required");
+	if (!field_is_safe(mountpoint))
+		return api_error_json("invalid characters in mountpoint");
+
+	char *types = NULL;
+	char *nav_system = NULL;
+	pos_t pos;
+	int have_pos = 0;
+	P_RWLOCK_RDLOCK(&caster->rtcm_lock);
+	if (caster->rtcm_cache) {
+		struct rtcm_info *info = (struct rtcm_info *)hash_table_get(caster->rtcm_cache, mountpoint);
+		if (info) {
+			types = rtcm_typeset_str(&info->typeset);
+			nav_system = rtcm_info_get_nav_system(info);
+			have_pos = rtcm_info_get_pos(info, &pos);
+		}
+	}
+	P_RWLOCK_UNLOCK(&caster->rtcm_lock);
+
+	if (!types || !*types) {
+		strfree(types);
+		strfree(nav_system);
+		return api_error_json("no RTCM3 data observed yet for this mountpoint -- it may not be connected yet, or isn't RTCM3");
+	}
+
+	int r = update_sourcetable_field(caster->config_dir, config->sourcetable_filename, mountpoint, 4, types);
+	if (r <= 0) {
+		strfree(types);
+		strfree(nav_system);
+		return api_error_json(r < 0 ? "cannot rewrite sourcetable_file" : "mountpoint not found in sourcetable");
+	}
+
+	if (nav_system)
+		update_sourcetable_field(caster->config_dir, config->sourcetable_filename, mountpoint, 6, nav_system);
+
+	if (have_pos) {
+		char latstr[32], lonstr[32];
+		snprintf(latstr, sizeof latstr, "%.6f", pos.lat);
+		snprintf(lonstr, sizeof lonstr, "%.6f", pos.lon);
+		update_sourcetable_field(caster->config_dir, config->sourcetable_filename, mountpoint, 9, latstr);
+		update_sourcetable_field(caster->config_dir, config->sourcetable_filename, mountpoint, 10, lonstr);
+	}
+
+	caster_reload(caster);
+	char result[400];
+	int n = snprintf(result, sizeof result, "{\"result\": 0, \"types\": \"%s\"", types);
+	if (nav_system)
+		n += snprintf(result+n, sizeof(result)-n, ", \"nav_system\": \"%s\"", nav_system);
+	if (have_pos)
+		n += snprintf(result+n, sizeof(result)-n, ", \"lat\": %.6f, \"lon\": %.6f", pos.lat, pos.lon);
+	snprintf(result+n, sizeof(result)-n, "}\n");
+	strfree(types);
+	strfree(nav_system);
+	char *s = mystrdup(result);
+	return mime_new(s, -1, "application/json", 1);
+}
+
 struct mime_content *api_sync_json(struct caster_state *caster, struct request *req) {
 	const char *type = json_object_get_string(json_object_object_get(req->json, "type"));
 

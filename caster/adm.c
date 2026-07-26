@@ -201,6 +201,7 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 			{"/api/v1/drop", "POST", api_drop_json},
 			{"/api/v1/sources", "POST", api_add_source_json},
 			{"/api/v1/sources/remove", "POST", api_remove_source_json},
+			{"/api/v1/sources/detect", "POST", api_detect_source_json},
 			{NULL, NULL, NULL}
 		};
 

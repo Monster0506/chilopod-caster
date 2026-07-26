@@ -757,6 +757,53 @@ json_object *rtcm_info_json(struct rtcm_info *this) {
 }
 
 /*
+ * Fill *pos with the position decoded from a 1005/1006 message, if the
+ * source has sent one. Returns 1 if a position is available, 0 otherwise.
+ */
+int rtcm_info_get_pos(struct rtcm_info *this, pos_t *pos) {
+	if (!rtcm_typeset_check(&this->typeset, 1005) && !rtcm_typeset_check(&this->typeset, 1006))
+		return 0;
+	double alt;
+	ecef_to_lat_lon(pos, &alt, this->x, this->y, this->z);
+	return 1;
+}
+
+static int rtcm_typeset_check_range(struct rtcm_typeset *this, int lo, int hi) {
+	for (int i = lo; i <= hi; i++)
+		if (rtcm_typeset_check(this, i))
+			return 1;
+	return 0;
+}
+
+/*
+ * Derive a "GPS+GLO+..." nav-system string from which constellation-specific
+ * message types (legacy, ephemeris, or MSM) have actually been observed.
+ * Returns NULL if nothing constellation-identifying has been seen yet.
+ */
+char *rtcm_info_get_nav_system(struct rtcm_info *this) {
+	struct rtcm_typeset *ts = &this->typeset;
+	int gps = rtcm_typeset_check_range(ts, 1001, 1004) || rtcm_typeset_check(ts, 1019)
+		|| rtcm_typeset_check_range(ts, 1071, 1077);
+	int glo = rtcm_typeset_check_range(ts, 1009, 1012) || rtcm_typeset_check(ts, 1020)
+		|| rtcm_typeset_check_range(ts, 1081, 1087);
+	int gal = rtcm_typeset_check(ts, 1045) || rtcm_typeset_check(ts, 1046)
+		|| rtcm_typeset_check_range(ts, 1091, 1097);
+	int bds = rtcm_typeset_check(ts, 1042) || rtcm_typeset_check_range(ts, 1121, 1127);
+	int qzs = rtcm_typeset_check(ts, 1044) || rtcm_typeset_check_range(ts, 1111, 1117);
+	int sbas = rtcm_typeset_check_range(ts, 1101, 1107);
+
+	if (!gps && !glo && !gal && !bds && !qzs && !sbas)
+		return NULL;
+
+	char buf[32];
+	int n = snprintf(buf, sizeof buf, "%s%s%s%s%s%s",
+		gps ? "GPS+" : "", glo ? "GLO+" : "", gal ? "GAL+" : "",
+		bds ? "BDS+" : "", qzs ? "QZS+" : "", sbas ? "SBAS+" : "");
+	buf[n-1] = '\0';
+	return mystrdup(buf);
+}
+
+/*
  * Return whether a packet is a position packet (types 1005 or 1006).
  */
 int rtcm_packet_is_pos(struct packet *p) {

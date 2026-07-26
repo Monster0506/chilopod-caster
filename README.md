@@ -302,7 +302,11 @@ Steps 2-4 below (registering the mountpoint and reloading) can be done in one ca
    curl http://localhost:2101/                                                 # STR;MOUNT1;... now present
    ```
 
-7. Once you can see the real decoded message types and position from step 6, go back and fix the placeholder `STR` line in `sourcetable_file` to match, then reload again.
+7. Once you can see the real decoded message types and position from step 6, go back and fix the placeholder `STR` line in `sourcetable_file` to match, then reload again -- or just call [`POST /adm/api/v1/sources/detect`](#post-admapiv1sourcesdetect), which does exactly this for you:
+   ```sh
+   curl -X POST "http://localhost:2101/adm/api/v1/sources/detect" --data "user=admin&password=admin&mountpoint=MOUNT1"
+   ```
+   There's no way to know the real message types before this point -- they're discovered from what the caster actually decodes once the source is streaming, not something you can read off the device in advance. This only works for genuine RTCM3 sources; Chilopod doesn't parse other formats (e.g. CMR), so there's nothing to detect for those.
 
 If the connection is refused, check whether the source device's TCP output only allows a single simultaneous client (common on some receivers) -- it may already be in use, or need reconfiguring on the device itself to allow multiple connections.
 
@@ -476,6 +480,7 @@ All admin routes are under `/adm/`, served on whichever port(s) you configure in
 | POST | `/adm/api/v1/drop` | Drop a connection by ID |
 | POST | `/adm/api/v1/sources` | Add a mountpoint (writes source_auth_file + sourcetable_file, reloads) |
 | POST | `/adm/api/v1/sources/remove` | Remove a mountpoint and drop its active connection, if any |
+| POST | `/adm/api/v1/sources/detect` | Detect a connected RTCM3 source's real message types (and position, if sent) and update its `STR` line |
 | POST | `/adm/api/v1/sync` | Internal cluster sync (token auth, not user/password) |
 
 ## Authentication
@@ -571,6 +576,15 @@ curl -X POST "http://localhost:2101/adm/api/v1/sources" \
   --data "user=admin&password=admin&mountpoint=MOUNT1&source_password=secret&lat=41.5&lon=-81.5"
 ```
 
+> **Watch out for `+` in field values** (e.g. `nav_system=GPS+GLO`) -- `curl --data` sends it as a literal `+`, and form-urlencoded bodies decode `+` as a space, so it'll arrive as `GPS GLO`. Use `--data-urlencode` instead for any field containing `+`:
+> ```sh
+> curl -X POST "http://localhost:2101/adm/api/v1/sources" \
+>   --data-urlencode "user=admin" --data-urlencode "password=admin" \
+>   --data-urlencode "mountpoint=MOUNT1" --data-urlencode "source_password=secret" \
+>   --data-urlencode "nav_system=GPS+GLO" --data-urlencode "lat=41.5" --data-urlencode "lon=-81.5"
+> ```
+> This isn't an issue from the admin UI's Add Source form -- the browser encodes `+` correctly on its own.
+
 ### `POST /adm/api/v1/sources/remove`
 
 Removes a mountpoint: deletes its entries from `source_auth_file` and `sourcetable_file`, drops any connection currently pushing to it, then reloads. Fails with `{"result": -1, "error": "mountpoint not found"}` if there's no matching entry.
@@ -578,6 +592,21 @@ Removes a mountpoint: deletes its entries from `source_auth_file` and `sourcetab
 ```sh
 curl -X POST "http://localhost:2101/adm/api/v1/sources/remove" \
   --data "user=admin&password=admin&mountpoint=MOUNT1"
+```
+
+### `POST /adm/api/v1/sources/detect`
+
+Looks up what the caster has actually decoded for a mountpoint (the same data `/adm/api/v1/rtcm` reports) and rewrites its `STR` line to match, then reloads -- the automated version of the "go back and fix the placeholder `STR` line" step in [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source). Updates two things independently:
+
+- **Format details** -- always, from the decoded RTCM3 message types.
+- **Position** -- only if the source has sent a 1005 or 1006 message (station coordinates); the response includes `lat`/`lon` when this happens, and omits them otherwise. There's no way to know a source's real surveyed position in advance either -- like message types, it's something the caster observes from the stream itself, not something you can enter more accurately by hand. `lat`/`lon` on [`POST /adm/api/v1/sources`](#post-admapiv1sources) only need to be approximate for this reason.
+
+All other fields on the line are left untouched. Fails with `{"result": -1, "error": "no RTCM3 data observed yet for this mountpoint -- ..."}` if the mountpoint isn't connected yet, or doesn't speak RTCM3 at all (e.g. a CMR source) -- there's nothing to detect from a non-RTCM3 stream, since Chilopod only parses RTCM3 framing.
+
+```sh
+curl -X POST "http://localhost:2101/adm/api/v1/sources/detect" \
+  --data "user=admin&password=admin&mountpoint=MOUNT1"
+# {"result": 0, "types": "1004,1006,1008,1012,1013,1033", "lat": 41.233276, "lon": -81.776917}
 ```
 
 ### `POST /adm/api/v1/sync`
