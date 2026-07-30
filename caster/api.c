@@ -427,6 +427,42 @@ struct mime_content *api_remove_source_json(struct caster_state *caster, struct 
 }
 
 /*
+ * Create or update a source_auth_file entry for a mountpoint.
+ */
+struct mime_content *api_auth_set_json(struct caster_state *caster, struct request *req) {
+	struct config *config = req->st->config;
+
+	char *mountpoint = (char *)hash_table_get(req->hash, "mountpoint");
+	char *auth_user = (char *)hash_table_get(req->hash, "auth_user");
+	char *auth_password = (char *)hash_table_get(req->hash, "auth_password");
+
+	if (!mountpoint || !*mountpoint || !auth_user || !*auth_user || !auth_password || !*auth_password)
+		return api_error_json("mountpoint, auth_user and auth_password are required");
+	if (!field_is_safe(mountpoint) || !field_is_safe(auth_user) || !field_is_safe(auth_password))
+		return api_error_json("invalid characters in mountpoint, auth_user or auth_password");
+
+	if (remove_matching_lines(caster->config_dir, config->source_auth_filename, ':', 0, mountpoint) < 0)
+		return api_error_json("cannot rewrite source_auth_file");
+
+	FILE *authf = fopen_absolute(caster->config_dir, config->source_auth_filename, "a");
+	if (authf == NULL)
+		return api_error_json("cannot open source_auth_file");
+	fprintf(authf, "%s:%s:%s\n", mountpoint, auth_user, auth_password);
+	fclose(authf);
+
+	caster_reload(caster);
+
+	json_object *j = json_object_new_object();
+	json_object_object_add_ex(j, "mountpoint", json_object_new_string(mountpoint), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "user", json_object_new_string(auth_user), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "password", json_object_new_string(auth_password), JSON_C_CONSTANT_NEW);
+	char *s = mystrdup(json_object_to_json_string(j));
+	struct mime_content *m = mime_new(s, -1, "application/json", 1);
+	json_object_put(j);
+	return m;
+}
+
+/*
  * Rewrite the sourcetable line for mountpoint (matched on field 1), replacing
  * field target_field with new_value. Returns 1 if a line was updated, 0 if
  * no matching line was found, -1 on I/O error.
