@@ -179,6 +179,29 @@ struct mime_content *api_drop_json(struct caster_state *caster, struct request *
 }
 
 /*
+ * Return the source_auth table (source.auth) as a JSON array.
+ */
+struct mime_content *api_auth_list_json(struct caster_state *caster, struct request *req) {
+	struct config *config = req->st->config;
+	json_object *new_list = json_object_new_array();
+
+	if (config->source_auth) {
+		for (struct auth_entry *a = config->source_auth; a->user; a++) {
+			json_object *j = json_object_new_object();
+			json_object_object_add_ex(j, "mountpoint", json_object_new_string(a->key), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(j, "user", json_object_new_string(a->user), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(j, "password", json_object_new_string(a->password), JSON_C_CONSTANT_NEW);
+			json_object_array_add(new_list, j);
+		}
+	}
+
+	char *s = mystrdup(json_object_to_json_string(new_list));
+	struct mime_content *m = mime_new(s, -1, "application/json", 1);
+	json_object_put(new_list);
+	return m;
+}
+
+/*
  * Reject characters that would corrupt the line-based auth/sourcetable file format.
  */
 static int field_is_safe(const char *s) {

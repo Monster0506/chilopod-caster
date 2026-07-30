@@ -200,6 +200,7 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 			{"/api/v1/rtcm", "GET", api_rtcm_json},
 			{"/api/v1/mem","GET", api_mem_json},
 			{"/api/v1/nodes","GET", api_nodes_json},
+			{"/api/v1/auth", "GET", api_auth_list_json},
 			{"/api/v1/livesources", "GET", livesource_list_json},
 			{"/api/v1/sourcetables", "GET", sourcetable_list_json},
 			{"/api/v1/reload", "POST", api_reload_json},
