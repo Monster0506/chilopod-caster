@@ -211,21 +211,28 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 			{NULL, NULL, NULL}
 		};
 
-		int i;
+		/*
+		 * Match on uri and method together, since some uris
+		 * have separate entries per method.
+		 */
+		int i, uri_matched = 0;
 		for (i = 0; calls[i].uri; i++) {
-			if (!strcmp(uri, calls[i].uri))
+			if (strcmp(uri, calls[i].uri))
+				continue;
+			uri_matched = 1;
+			if (!strcmp(method, calls[i].method))
 				break;
 		}
 
 		/* Check the URI */
-		if (calls[i].uri == NULL) {
+		if (!uri_matched) {
 			request_free(req);
 			*err = 404;
 			return -1;
 		}
 
 		/* Check the method */
-		if (strcmp(method, calls[i].method)) {
+		if (calls[i].uri == NULL) {
 			request_free(req);
 			*err = 405;
 			return -1;
