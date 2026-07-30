@@ -13,8 +13,9 @@
     error = '';
     loading = true;
     try {
-      const params = new URLSearchParams({ user, password });
-      const res = await fetch(`/adm/api/v1/mem?${params}`);
+      const res = await fetch('/adm/api/v1/mem', {
+        headers: { Authorization: `Basic ${btoa(`${user}:${password}`)}` },
+      });
       if (res.ok) {
         setCredentials(user, password);
         onLogin();

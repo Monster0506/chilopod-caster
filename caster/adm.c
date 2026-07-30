@@ -176,8 +176,13 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 		 * Check credentials
 		 */
 		char *user, *password;
-		user = hash_table_get(req->hash, "user");
-		password = hash_table_get(req->hash, "password");
+		if (st->scheme_basic && st->user && st->password) {
+			user = st->user;
+			password = st->password;
+		} else {
+			user = hash_table_get(req->hash, "user");
+			password = hash_table_get(req->hash, "password");
+		}
 
 		if (!user || !password || !check_password(st, st->config->admin_user, user, password)) {
 			request_free(req);

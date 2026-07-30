@@ -19,20 +19,22 @@ export function isLoggedIn() {
   return !!sessionStorage.getItem('user');
 }
 
-export async function apiGet(endpoint) {
+function authHeader() {
   const { user, password } = getCredentials();
-  const params = new URLSearchParams({ user, password });
-  const res = await fetch(`/adm/api/v1/${endpoint}?${params}`);
+  return { Authorization: `Basic ${btoa(`${user}:${password}`)}` };
+}
+
+export async function apiGet(endpoint) {
+  const res = await fetch(`/adm/api/v1/${endpoint}`, { headers: authHeader() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
 export async function apiPost(endpoint, extra = {}) {
-  const { user, password } = getCredentials();
-  const body = new URLSearchParams({ user, password, ...extra });
+  const body = new URLSearchParams(extra);
   const res = await fetch(`/adm/api/v1/${endpoint}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...authHeader() },
     body,
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
