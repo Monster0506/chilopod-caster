@@ -14,6 +14,27 @@
   let baseLayer;
   let roverLayer;
   let fitted = false;
+  let roverMarkers = {};
+
+  const VIEW_STORAGE_KEY = 'chilopod:map:view';
+
+  function loadSavedView() {
+    try {
+      const raw = localStorage.getItem(VIEW_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveView() {
+    if (!map) return;
+    const center = map.getCenter();
+    localStorage.setItem(
+      VIEW_STORAGE_KEY,
+      JSON.stringify({ lat: center.lat, lng: center.lng, zoom: map.getZoom() })
+    );
+  }
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -85,10 +106,18 @@
     }
   }
 
+  function flyToRover(r) {
+    if (!map || r.lat == null || r.lon == null) return;
+    map.flyTo([r.lat, r.lon], Math.max(map.getZoom(), 12));
+    const marker = roverMarkers[r.id];
+    if (marker) marker.openPopup();
+  }
+
   function rebuildMarkers() {
     if (!map) return;
     baseLayer.clearLayers();
     roverLayer.clearLayers();
+    roverMarkers = {};
 
     const bounds = [];
 
@@ -119,6 +148,7 @@
         { autoPan: false }
       );
       roverLayer.addLayer(marker);
+      roverMarkers[r.id] = marker;
       bounds.push([r.lat, r.lon]);
     }
 
@@ -129,7 +159,12 @@
   }
 
   onMount(() => {
-    map = L.map(mapEl, { center: [39, -98], zoom: 4 });
+    const savedView = loadSavedView();
+    map = L.map(mapEl, {
+      center: savedView ? [savedView.lat, savedView.lng] : [39, -98],
+      zoom: savedView ? savedView.zoom : 4,
+    });
+    if (savedView) fitted = true;
 
     const satellite = L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -149,6 +184,21 @@
         { 'Base stations': baseLayer, Rovers: roverLayer }
       )
       .addTo(map);
+
+    const Legend = L.Control.extend({
+      options: { position: 'bottomleft' },
+      onAdd() {
+        const div = L.DomUtil.create('div', 'map-legend');
+        div.innerHTML =
+          '<div><span class="map-legend-dot" style="background:#22c55e"></span>Live base</div>' +
+          '<div><span class="map-legend-dot" style="background:#64748b"></span>Declared, offline</div>' +
+          '<div><span class="map-legend-dot" style="background:#3b82f6"></span>Rover</div>';
+        return div;
+      },
+    });
+    new Legend().addTo(map);
+
+    map.on('moveend zoomend', saveView);
 
     return () => map.remove();
   });
@@ -202,7 +252,11 @@
         <tr><td colspan="6" class="empty">No rovers connected.</td></tr>
       {/if}
       {#each rovers() as r (r.id)}
-        <tr>
+        <tr
+          class:clickable={r.lat != null}
+          onclick={() => flyToRover(r)}
+          title={r.lat != null ? 'Click to locate on map' : ''}
+        >
           <td class="mono">{r.id}</td>
           <td class="mono">{r.ip}</td>
           <td class="mono">{r.mountpoint ?? r.assigned_base ?? '—'}</td>
@@ -313,6 +367,10 @@
     background: #1a1d27;
   }
 
+  tr.clickable {
+    cursor: pointer;
+  }
+
   .mono {
     font-family: monospace;
     font-size: 0.82rem;
@@ -357,5 +415,25 @@
 
   :global(.leaflet-popup-tip) {
     background: #1a1d27;
+  }
+
+  :global(.map-legend) {
+    background: #1a1d27ee;
+    border: 1px solid #2a2d3a;
+    border-radius: 6px;
+    padding: 0.5rem 0.65rem;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    box-shadow: none;
+  }
+
+  :global(.map-legend-dot) {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-right: 0.4rem;
+    vertical-align: middle;
   }
 </style>
