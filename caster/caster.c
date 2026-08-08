@@ -333,6 +333,7 @@ caster_new(const char *config_file, int nbase) {
 
 	r1 = log_init(&this->flog, NULL, &caster_log_cb, -1, -1, -1, -1, this);
 	r2 = log_init(&this->alog, NULL, &caster_alog, 0, -1, -1, -1, this);
+	logbuf_init(&this->logbuf);
 
 	if (r1 < 0 || r2 < 0 || this->config_dir == NULL
 	    || (threads && this->joblist == NULL)
@@ -342,6 +343,7 @@ caster_new(const char *config_file, int nbase) {
 		/* Special case for logs, as the cancel: routine can't know whether or not to call log_free() */
 		log_free(&this->flog);
 		log_free(&this->alog);
+		logbuf_free(&this->logbuf);
 		goto cancel;
 	}
 
@@ -478,6 +480,7 @@ void caster_free(struct caster_state *this) {
 	caster_clear_signals(this);
 	log_free(&this->flog);
 	log_free(&this->alog);
+	logbuf_free(&this->logbuf);
 	_caster_common_free(this);
 }
 

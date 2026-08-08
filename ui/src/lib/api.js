@@ -25,7 +25,7 @@ function authHeader() {
 }
 
 export async function apiGet(endpoint) {
-  const res = await fetch(`/adm/api/v1/${endpoint}`, { headers: authHeader() });
+  const res = await fetch(`/adm/api/v1/${endpoint}`, { headers: authHeader(), cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }

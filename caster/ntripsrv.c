@@ -696,8 +696,9 @@ void ntripsrv_readcb(struct bufferevent *bev, void *arg) {
 						if (strlen(st->http_args[1]) >= 5 && !memcmp(st->http_args[1], "/adm/", 5)) {
 							st->type = "adm";
 							if (!st->content_length) {
-								err = 400;
-								break;
+								admsrv(st, st->http_args[0], "/adm", st->http_args[1] + 4, &err, &opt_headers);
+								ntrip_set_state(st, NTRIP_WAIT_HTTP_METHOD);
+								continue;
 							}
 							ntrip_set_state(st, NTRIP_WAIT_CLIENT_CONTENT);
 							struct timeval adm_read_timeout = { 0, 0 };

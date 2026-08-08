@@ -3,6 +3,7 @@
   import { getCredentials, clearCredentials } from '../lib/api.js';
   import Dashboard from '../pages/Dashboard.svelte';
   import Connections from '../pages/Connections.svelte';
+  import Log from '../pages/Log.svelte';
   import Settings from '../pages/Settings.svelte';
 
   let { onLogout } = $props();
@@ -12,12 +13,14 @@
   const pages = {
     dashboard:   Dashboard,
     connections: Connections,
+    log:         Log,
     settings:    Settings,
   };
 
   const navItems = [
     { id: 'dashboard',   label: 'Dashboard' },
     { id: 'connections', label: 'Connections' },
+    { id: 'log',         label: 'Log' },
     { id: 'settings',    label: 'Settings' },
   ];
 

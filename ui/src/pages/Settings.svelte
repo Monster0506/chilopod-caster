@@ -93,11 +93,19 @@
     for (const f of section.fields) payload[f.name] = String(form[f.name] ?? '');
     try {
       const res = await apiPost('settings', payload);
-      if (res.result === 0) {
-        sectionMsg = { ...sectionMsg, [section.key]: 'Saved.' };
-        await fetchSettings();
+      if (res.error) {
+        // Validation failure -- nothing was written, no need to resync.
+        sectionMsg = { ...sectionMsg, [section.key]: res.error };
       } else {
-        sectionMsg = { ...sectionMsg, [section.key]: res.error ?? 'Failed to save.' };
+        // The value is written to disk before reload runs, so it's already
+        // live even if reload itself (res.result !== 0) had trouble with an
+        // unrelated step (e.g. reopening log files). Always resync to show
+        // the server's actual current value rather than assuming failure.
+        sectionMsg = {
+          ...sectionMsg,
+          [section.key]: res.result === 0 ? 'Saved.' : 'Saved, but reload reported an issue -- showing current server value.',
+        };
+        await fetchSettings();
       }
     } catch (e) {
       sectionMsg = { ...sectionMsg, [section.key]: `Failed: ${e.message}` };

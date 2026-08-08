@@ -130,19 +130,23 @@ struct ntrip_state *ntrip_new(struct caster_state *caster, struct bufferevent *b
 	return this;
 }
 
-/*
- * Update our config reference if necessary.
- *
- * Required locks: ntrip_state
- */
 struct config *ntrip_refresh_config(struct ntrip_state *this) {
-	struct config *config = this->tmpconfig?this->tmpconfig:this->config;
-	if (this->tmpconfig && this->tmpconfig != this->config && this->tmpconfig->gen > this->config->gen) {
-		config_incref(this->tmpconfig);
-		config_decref(this->config);
-		this->config = config;
+	if (this->tmpconfig) {
+		if (this->tmpconfig != this->config && this->tmpconfig->gen > this->config->gen) {
+			config_incref(this->tmpconfig);
+			config_decref(this->config);
+			this->config = this->tmpconfig;
+		}
+		return this->config;
 	}
-	return config;
+
+	struct config *live = caster_config_getref(this->caster);
+	if (live != this->config) {
+		config_decref(this->config);
+		this->config = live;
+	} else
+		config_decref(live);
+	return this->config;
 }
 
 /*

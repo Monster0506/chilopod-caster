@@ -160,6 +160,23 @@ struct mime_content *api_nodes_json(struct caster_state *caster, struct request 
 }
 
 /*
+ * Return buffered log entries, optionally only those after a given id
+ * (?since=<id>), for incremental polling.
+ */
+struct mime_content *api_log_json(struct caster_state *caster, struct request *req) {
+	long long since = -1;
+	char *since_str = (char *)hash_table_get(req->hash, "since");
+	if (since_str)
+		sscanf(since_str, "%lld", &since);
+
+	json_object *arr = logbuf_json_since(&caster->logbuf, since);
+	char *s = mystrdup(json_object_to_json_string(arr));
+	struct mime_content *m = mime_new(s, -1, "application/json", 1);
+	json_object_put(arr);
+	return m;
+}
+
+/*
  * Reload the configuration and return a status code.
  */
 struct mime_content *api_reload_json(struct caster_state *caster, struct request *req) {

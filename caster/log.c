@@ -138,6 +138,10 @@ vlogall(struct caster_state *caster, struct gelf_entry *g, struct log *log, int 
 			logfmt_file(log, g, level, "[%lu] %s\n", (long)thread_id, msg);
 		else
 			logfmt_file(log, g, level, "%s\n", msg);
+
+		if (log == &caster->flog)
+			logbuf_add(&caster->logbuf, level, thread_id, g->connection_id,
+				g->remote_ip, g->remote_port, &g->ts, msg);
 	}
 
 	if (level <= atomic_load(&log->syslog_level)) {

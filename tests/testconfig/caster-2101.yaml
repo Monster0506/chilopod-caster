@@ -1,0 +1,30 @@
+listen:
+  - port:		2101
+    ip:			127.0.0.1
+
+host_auth_file:		host.auth
+source_auth_file:	source.auth
+sourcetable_file:	sourcetable.dat
+blocklist_file:		blocklist1
+access_log:		../test-access.log
+log:			../test-caster.log
+
+trusted_http_ip_header:	"X-Forwarded-For"
+
+idle_max_delay:			10
+http_content_length_max:	1000000
+http_header_max_size:		4096
+
+syncer_auth:		'587e5bbadbc6186fad0d6177eb10a6cd9d5cb934d3d5f155107592535bd20290'
+
+webroots:
+  - uri:		/example-well-known/
+    path:		webroot/
+
+log_level:	DEBUG
+
+admin_user:	admin
+
+ui_dir: /mnt/c/Users/TJ/Documents/Code/github/chilopod-caster/ui/dist
+hysteresis_m:	500
+sourcetable_priority:	90

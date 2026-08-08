@@ -16,6 +16,7 @@
 #include "jobs.h"
 #include "livesource.h"
 #include "log.h"
+#include "logbuf.h"
 #include "nodes.h"
 #include "queue.h"
 #include "refcnt.h"
@@ -128,6 +129,7 @@ struct caster_state {
 
 	/* Logs */
 	struct log flog, alog;
+	struct logbuf logbuf;
 	char hostname[128];
 
 	/* Thread id (thread-specific variable) for logs */
