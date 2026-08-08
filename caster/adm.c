@@ -158,7 +158,16 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 				return -1;
 			}
 		}
-	} else if (!strcmp(method, "GET") && st->query_string) {
+	} else if (!strcmp(method, "GET")
+			&& (st->query_string || !strncmp(uri, "/api/v1/", 8))) {
+		/*
+		 * /api/v1/* routes may now authenticate via the Authorization header
+		 * alone, with no query string -- still build a (possibly empty) hash
+		 * so they reach the dispatch table below instead of falling through
+		 * to the legacy /mem, /mem.json, /net handling, which has different
+		 * response formats and must stay reachable when there really is no
+		 * query string on those bare paths.
+		 */
 		req->hash = hash_from_urlencoding(st->query_string);
 		if (!req->hash) {
 			request_free(req);

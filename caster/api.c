@@ -56,6 +56,9 @@ static json_object *api_ntrip_json(struct ntrip_state *st) {
 	if (st->user_agent)
 		json_object_object_add_ex(new_obj, "user_agent", json_object_new_string(st->user_agent), JSON_C_CONSTANT_NEW);
 
+	if (st->scheme_basic && st->user)
+		json_object_object_add_ex(new_obj, "auth_user", json_object_new_string(st->user), JSON_C_CONSTANT_NEW);
+
 	struct tcp_info ti;
 	socklen_t ti_len = sizeof ti;
 	if (getsockopt(st->fd, IPPROTO_TCP, TCP_INFO, &ti, &ti_len) >= 0) {

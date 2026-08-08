@@ -74,6 +74,11 @@
     return h + 'h ' + m + 'm';
   }
 
+  function formatUserAgent(conn) {
+    const ua = conn.user_agent ?? '—';
+    return conn.auth_user ? `${conn.auth_user}/${ua}` : ua;
+  }
+
   function rows(net) {
     return Object.values(net).filter(c => selectedTypes.has(c.type));
   }
@@ -135,7 +140,7 @@
             <th>Type</th>
             <th>IP</th>
             <th>Mountpoint</th>
-            <th>User Agent</th>
+            <th>User / Agent</th>
             <th>Received</th>
             <th>Sent</th>
             <th>Connected</th>
@@ -152,7 +157,7 @@
               <td><span class="badge badge-{conn.type}">{conn.type}</span></td>
               <td class="mono">{conn.ip}</td>
               <td class="mono">{conn.mountpoint ?? '—'}</td>
-              <td class="ua" title={conn.user_agent}>{conn.user_agent ?? '—'}</td>
+              <td class="ua" title={formatUserAgent(conn)}>{formatUserAgent(conn)}</td>
               <td class="mono">{formatBytes(conn.received_bytes)}</td>
               <td class="mono">{formatBytes(conn.sent_bytes)}</td>
               <td class="mono">{formatDuration(conn.start)}</td>
