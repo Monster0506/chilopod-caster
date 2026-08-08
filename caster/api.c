@@ -668,6 +668,10 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 		char *value = (char *)hash_table_get(req->hash, SIZE_FIELDS[i]);
 		if (!value)
 			continue;
+		/* strtoul() accepts a leading '-' and silently wraps it into a huge
+		 * unsigned value instead of failing, so reject it explicitly. */
+		if (value[0] == '-')
+			return api_error_json("a size setting must be a positive integer");
 		unsigned long v = strtoul(value, &end, 10);
 		if (end == value || *end || v == 0)
 			return api_error_json("a size setting must be a positive integer");
