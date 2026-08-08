@@ -1,178 +1,24 @@
 <script>
-  import { apiGet, apiPost } from '../lib/api.js';
+  import Mountpoints from './Mountpoints.svelte';
+  import Rovers from './Rovers.svelte';
 
-  const TYPES = [
-    { value: 'client', label: 'Clients' },
-    { value: 'source', label: 'Sources' },
-    { value: 'source_fetcher', label: 'Fetchers' },
-    { value: 'adm', label: 'Admin' },
-  ];
-
-  let data = $state(null);
-  let error = $state('');
-  let autoRefresh = $state(true);
-  let selectedTypes = $state(new Set(['client', 'source', 'source_fetcher']));
-  let filterOpen = $state(false);
-  let filterEl;
-  let dropping = $state(new Set());
-  let dropMsg = $state('');
-
-  function toggleType(t) {
-    const next = new Set(selectedTypes);
-    if (next.has(t)) next.delete(t);
-    else next.add(t);
-    selectedTypes = next;
-  }
-
-  $effect(() => {
-    if (!filterOpen) return;
-    function onDocClick(e) {
-      if (filterEl && !filterEl.contains(e.target)) filterOpen = false;
-    }
-    document.addEventListener('click', onDocClick);
-    return () => document.removeEventListener('click', onDocClick);
-  });
-
-  async function fetchAll() {
-    try {
-      const net = await apiGet('net');
-      error = '';
-      data = net;
-    } catch (e) {
-      error = e.message;
-    }
-  }
-
-  async function drop(id) {
-    dropping = new Set([...dropping, id]);
-    dropMsg = '';
-    try {
-      await apiPost('drop', { id });
-      dropMsg = `Connection ${id} dropped.`;
-      await fetchAll();
-    } catch (e) {
-      dropMsg = `Drop failed: ${e.message}`;
-    } finally {
-      dropping = new Set([...dropping].filter(x => x !== id));
-    }
-  }
-
-  function formatDuration(start) {
-    if (!start) return '—';
-    const sec = Math.floor((Date.now() - new Date(start).getTime()) / 1000);
-    if (sec < 60) return sec + 's';
-    if (sec < 3600) return Math.floor(sec / 60) + 'm ' + (sec % 60) + 's';
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    return h + 'h ' + m + 'm';
-  }
-
-  function formatLatency(conn) {
-    const rtt = conn.tcp_info?.rtt;
-    if (rtt == null) return '—';
-    return (rtt / 1000).toFixed(1) + ' ms';
-  }
-
-  function formatMountpoint(conn) {
-    if (!conn.mountpoint) return '—';
-    return conn.assigned_base ? `${conn.mountpoint} → ${conn.assigned_base}` : conn.mountpoint;
-  }
-
-  function rows(net) {
-    return Object.values(net).filter(c => selectedTypes.has(c.type));
-  }
-
-  $effect(() => {
-    fetchAll();
-    if (!autoRefresh) return;
-    const id = setInterval(fetchAll, 3000);
-    return () => clearInterval(id);
-  });
+  let tab = $state('mountpoints');
 </script>
 
 <div class="page">
-  <div class="header">
-    <h2>Connections</h2>
-    <div class="controls">
-      <div class="type-filter" bind:this={filterEl}>
-        <button type="button" class="filter-toggle" onclick={() => (filterOpen = !filterOpen)}>
-          Types ({selectedTypes.size}) <span class="caret">▾</span>
-        </button>
-        {#if filterOpen}
-          <div class="filter-panel">
-            {#each TYPES as t (t.value)}
-              <label class="filter-option">
-                <input
-                  type="checkbox"
-                  checked={selectedTypes.has(t.value)}
-                  onchange={() => toggleType(t.value)}
-                />
-                {t.label}
-              </label>
-            {/each}
-          </div>
-        {/if}
-      </div>
-      <label class="toggle">
-        <input type="checkbox" bind:checked={autoRefresh} />
-        Auto-refresh
-      </label>
-      <button onclick={fetchAll}>Refresh</button>
-    </div>
+  <div class="tabs">
+    <button class="tab" class:active={tab === 'mountpoints'} onclick={() => (tab = 'mountpoints')}>
+      Mountpoints
+    </button>
+    <button class="tab" class:active={tab === 'rovers'} onclick={() => (tab = 'rovers')}>
+      Rovers
+    </button>
   </div>
 
-  {#if dropMsg}
-    <p class="drop-msg">{dropMsg}</p>
-  {/if}
-
-  {#if error}
-    <p class="error">{error}</p>
-  {:else if !data}
-    <p class="loading">Loading…</p>
+  {#if tab === 'mountpoints'}
+    <Mountpoints />
   {:else}
-    {@const list = rows(data)}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Type</th>
-            <th>IP</th>
-            <th>Latency</th>
-            <th>Mountpoint</th>
-            <th>User</th>
-            <th>Connected</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#if list.length === 0}
-            <tr><td colspan="8" class="empty">No connections.</td></tr>
-          {/if}
-          {#each list as conn (conn.id)}
-            <tr>
-              <td class="mono">{conn.id}</td>
-              <td><span class="badge badge-{conn.type}">{conn.type}</span></td>
-              <td class="mono">{conn.ip}</td>
-              <td class="mono">{formatLatency(conn)}</td>
-              <td class="mono" title={conn.assigned_base ? `Requested ${conn.mountpoint}, assigned ${conn.assigned_base}` : conn.mountpoint}>{formatMountpoint(conn)}</td>
-              <td class="mono">{conn.auth_user ?? '—'}</td>
-              <td class="mono">{formatDuration(conn.start)}</td>
-              <td>
-                <button
-                  class="drop-btn"
-                  onclick={() => drop(conn.id)}
-                  disabled={dropping.has(conn.id)}
-                >
-                  {dropping.has(conn.id) ? '…' : 'Drop'}
-                </button>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-    <p class="count">{list.length} connection{list.length === 1 ? '' : 's'}</p>
+    <Rovers />
   {/if}
 </div>
 
@@ -181,226 +27,31 @@
     padding: 2rem;
   }
 
-  .header {
+  .tabs {
     display: flex;
-    align-items: center;
-    gap: 1.5rem;
-    margin-bottom: 1.5rem;
-  }
-
-  h2 {
-    margin: 0;
-    color: #e2e8f0;
-    font-size: 1.2rem;
-  }
-
-  .controls {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .type-filter {
-    position: relative;
-  }
-
-  .filter-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.35rem 0.6rem;
-    background: #1a1d27;
-    border: 1px solid #2a2d3a;
-    border-radius: 5px;
-    color: #94a3b8;
-    font-size: 0.85rem;
-    cursor: pointer;
-  }
-
-  .filter-toggle:hover {
-    border-color: #3a3d4a;
-  }
-
-  .caret {
-    font-size: 0.7rem;
-    color: #475569;
-  }
-
-  .filter-panel {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    z-index: 10;
-    min-width: 150px;
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    background: #1a1d27;
-    border: 1px solid #2a2d3a;
-    border-radius: 6px;
-    padding: 0.4rem;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
-  }
-
-  .filter-option {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.3rem 0.4rem;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    color: #94a3b8;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .filter-option:hover {
-    background: #22263a;
-    color: #e2e8f0;
-  }
-
-  .toggle {
-    display: flex;
-    align-items: center;
     gap: 0.4rem;
-    font-size: 0.85rem;
-    color: #64748b;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  button {
-    padding: 0.4rem 1rem;
-    background: #1e3a5f;
-    border: 1px solid #2563eb;
-    border-radius: 5px;
-    color: #93c5fd;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: background 120ms;
-  }
-
-  button:hover:not(:disabled) {
-    background: #1e40af;
-  }
-
-  button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .drop-msg {
-    margin: 0 0 1rem;
-    font-size: 0.85rem;
-    color: #64748b;
-  }
-
-  .table-wrap {
-    overflow-x: auto;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-  }
-
-  th {
-    text-align: left;
-    padding: 0.5rem 0.75rem;
-    color: #475569;
-    font-weight: 500;
+    margin-bottom: 1.5rem;
     border-bottom: 1px solid #2a2d3a;
-    white-space: nowrap;
   }
 
-  td {
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #1e2130;
-    color: #94a3b8;
-    vertical-align: middle;
-  }
-
-  tr:last-child td {
-    border-bottom: none;
-  }
-
-  tr:hover td {
-    background: #1a1d27;
-  }
-
-  .mono {
-    font-family: monospace;
-    font-size: 0.82rem;
-  }
-
-  .badge {
-    padding: 0.15rem 0.5rem;
-    border-radius: 3px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .badge-client {
-    background: #1e3a5f;
-    color: #93c5fd;
-  }
-
-  .badge-source {
-    background: #1a3a1a;
-    color: #86efac;
-  }
-
-  .badge-source_fetcher {
-    background: #2d2a1a;
-    color: #fde68a;
-  }
-
-  .badge-adm {
-    background: #2a1a2d;
-    color: #d8b4fe;
-  }
-
-  .drop-btn {
-    padding: 0.25rem 0.6rem;
-    background: transparent;
-    border: 1px solid #7f1d1d;
-    border-radius: 4px;
-    color: #fca5a5;
-    font-size: 0.78rem;
+  .tab {
+    padding: 0.5rem 1rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    color: #64748b;
+    font-size: 0.9rem;
     cursor: pointer;
-    transition: background 120ms;
+    transition: color 120ms, border-color 120ms;
   }
 
-  .drop-btn:hover:not(:disabled) {
-    background: #7f1d1d33;
+  .tab:hover:not(.active) {
+    color: #94a3b8;
   }
 
-  .drop-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .empty {
-    text-align: center;
-    color: #475569;
-    padding: 2rem;
-  }
-
-  .count {
-    margin: 0.75rem 0 0;
-    font-size: 0.8rem;
-    color: #475569;
-  }
-
-  .error {
-    color: #fca5a5;
-    font-size: 0.9rem;
-  }
-
-  .loading {
-    color: #475569;
-    font-size: 0.9rem;
+  .tab.active {
+    color: #e2e8f0;
+    border-bottom-color: #2563eb;
   }
 </style>

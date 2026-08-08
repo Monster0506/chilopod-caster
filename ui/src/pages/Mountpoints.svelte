@@ -1,8 +1,10 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
+  import { Pencil, Plus, Trash2, X } from '@lucide/svelte';
 
   let table = $state(null);
   let net = $state(null);
+  let auth = $state(null);
   let error = $state('');
   let autoRefresh = $state(true);
   let showForm = $state(false);
@@ -12,6 +14,11 @@
   let removeMsg = $state('');
   let detecting = $state(new Set());
   let detectMsg = $state('');
+
+  let editingAuth = $state(null);
+  let authForm = $state({ auth_user: '', auth_password: '' });
+  let savingAuth = $state(false);
+  let authMsg = $state('');
 
   const blankForm = {
     mountpoint: '',
@@ -33,10 +40,13 @@
 
   async function fetchAll() {
     try {
-      const [tables, connections] = await Promise.all([apiGet('sourcetables'), apiGet('net')]);
+      const [tables, connections, authEntries] = await Promise.all([
+        apiGet('sourcetables'), apiGet('net'), apiGet('auth'),
+      ]);
       error = '';
       table = tables.find((t) => t.host === 'LOCAL') ?? { mountpoints: {} };
       net = connections;
+      auth = authEntries;
     } catch (e) {
       error = e.message;
     }
@@ -44,11 +54,22 @@
 
   function liveInfo(mountpoint) {
     if (!net) return null;
-    return Object.values(net).find((c) => c.type === 'source' && c.mountpoint === mountpoint) ?? null;
+    return Object.values(net).find((c) => (c.type === 'source' || c.type === 'source_fetcher') && c.mountpoint === mountpoint) ?? null;
+  }
+
+  function authFor(mountpoint) {
+    if (!auth) return null;
+    return auth.find((a) => a.mountpoint === mountpoint) ?? null;
   }
 
   function strField(str, i) {
     return str.split(';')[i] ?? '';
+  }
+
+  function formatLatency(live) {
+    const rtt = live?.tcp_info?.rtt;
+    if (rtt == null) return '—';
+    return (rtt / 1000).toFixed(1) + ' ms';
   }
 
   async function submitForm() {
@@ -110,6 +131,39 @@
     }
   }
 
+  function startAuthEdit(mountpoint) {
+    const existing = authFor(mountpoint);
+    editingAuth = mountpoint;
+    authForm = { auth_user: existing?.user ?? '', auth_password: existing?.password ?? '' };
+    authMsg = '';
+  }
+
+  function cancelAuthEdit() {
+    editingAuth = null;
+  }
+
+  async function saveAuth(mountpoint) {
+    if (!authForm.auth_user || !authForm.auth_password) {
+      authMsg = 'User and password are required.';
+      return;
+    }
+    savingAuth = true;
+    authMsg = '';
+    try {
+      const res = await apiPost('auth', { mountpoint, ...authForm });
+      if (res.error) {
+        authMsg = res.error;
+      } else {
+        editingAuth = null;
+        await fetchAll();
+      }
+    } catch (e) {
+      authMsg = `Failed: ${e.message}`;
+    } finally {
+      savingAuth = false;
+    }
+  }
+
   $effect(() => {
     fetchAll();
     if (!autoRefresh) return;
@@ -118,103 +172,129 @@
   });
 </script>
 
-<div class="page">
-  <div class="header">
-    <h2>Mountpoints</h2>
-    <div class="controls">
-      <label class="toggle">
-        <input type="checkbox" bind:checked={autoRefresh} />
-        Auto-refresh
-      </label>
-      <button onclick={fetchAll}>Refresh</button>
-      <button class="add-btn" onclick={() => (showForm = !showForm)}>
-        {showForm ? 'Cancel' : '+ Add Mountpoint'}
-      </button>
-    </div>
+<div class="header">
+  <div class="controls">
+    <label class="toggle">
+      <input type="checkbox" bind:checked={autoRefresh} />
+      Auto-refresh
+    </label>
+    <button onclick={fetchAll}>Refresh</button>
+    <button class="add-btn" onclick={() => (showForm = !showForm)} title={showForm ? 'Cancel' : 'Add Mountpoint'}>
+      {#if showForm}<X size={16} />{:else}<Plus size={16} />{/if}
+    </button>
   </div>
+</div>
 
-  {#if showForm}
-    <form class="add-form" onsubmit={(e) => { e.preventDefault(); submitForm(); }}>
-      <div class="grid">
-        <label>Mountpoint <input required bind:value={form.mountpoint} placeholder="MYBASE" /></label>
-        <label>Password <input required bind:value={form.source_password} placeholder="secret" /></label>
-        <label>Identifier <input bind:value={form.identifier} placeholder="defaults to mountpoint" /></label>
-        <label>Format <input bind:value={form.format} /></label>
-        <label>Format details <input bind:value={form.format_details} placeholder="1004,1006,1012,1033" /></label>
-        <label>Carrier <input bind:value={form.carrier} /></label>
-        <label>Nav system <input bind:value={form.nav_system} /></label>
-        <label>Network <input bind:value={form.network} /></label>
-        <label>Country <input bind:value={form.country} /></label>
-        <label>Latitude <input bind:value={form.lat} placeholder="41.5 (approximate is fine)" /></label>
-        <label>Longitude <input bind:value={form.lon} placeholder="-81.5 (approximate is fine)" /></label>
-        <label>Solution <input bind:value={form.solution} /></label>
-        <label>Generator <input bind:value={form.generator} placeholder="defaults to unknown" /></label>
-        <label>Bitrate <input bind:value={form.bitrate} /></label>
-      </div>
-      <div class="form-actions">
-        <button type="submit" disabled={submitting}>{submitting ? 'Adding…' : 'Add mountpoint'}</button>
-        {#if formMsg}<span class="form-msg">{formMsg}</span>{/if}
-      </div>
-      <p class="hint">
-        New mountpoints only appear below once a source actually connects and pushes data --
-        registering it here just makes the caster ready to accept the push. Format details and
-        position don't need to be exact for RTCM3 sources -- an approximate lat/lon is fine,
-        Format details can be left blank, and "Detect" (once connected) fetches both from what
-        the caster actually decodes.
-      </p>
-    </form>
-  {/if}
+{#if showForm}
+  <form class="add-form" onsubmit={(e) => { e.preventDefault(); submitForm(); }}>
+    <div class="grid">
+      <label>Mountpoint <input required bind:value={form.mountpoint} placeholder="MYBASE" /></label>
+      <label>Password <input required bind:value={form.source_password} placeholder="secret" /></label>
+      <label>Identifier <input bind:value={form.identifier} placeholder="defaults to mountpoint" /></label>
+      <label>Format <input bind:value={form.format} /></label>
+      <label>Format details <input bind:value={form.format_details} placeholder="1004,1006,1012,1033" /></label>
+      <label>Carrier <input bind:value={form.carrier} /></label>
+      <label>Nav system <input bind:value={form.nav_system} /></label>
+      <label>Network <input bind:value={form.network} /></label>
+      <label>Country <input bind:value={form.country} /></label>
+      <label>Latitude <input bind:value={form.lat} placeholder="41.5 (approximate is fine)" /></label>
+      <label>Longitude <input bind:value={form.lon} placeholder="-81.5 (approximate is fine)" /></label>
+      <label>Solution <input bind:value={form.solution} /></label>
+      <label>Generator <input bind:value={form.generator} placeholder="defaults to unknown" /></label>
+      <label>Bitrate <input bind:value={form.bitrate} /></label>
+    </div>
+    <div class="form-actions">
+      <button type="submit" disabled={submitting}>{submitting ? 'Adding…' : 'Add mountpoint'}</button>
+      {#if formMsg}<span class="form-msg">{formMsg}</span>{/if}
+    </div>
+    <p class="hint">
+      New mountpoints only appear below once a source actually connects and pushes data --
+      registering it here just makes the caster ready to accept the push. Format details and
+      position don't need to be exact for RTCM3 sources -- an approximate lat/lon is fine,
+      Format details can be left blank, and "Detect" (once connected) fetches both from what
+      the caster actually decodes.
+    </p>
+  </form>
+{/if}
 
-  {#if removeMsg}
-    <p class="remove-msg">{removeMsg}</p>
-  {/if}
-  {#if detectMsg}
-    <p class="remove-msg">{detectMsg}</p>
-  {/if}
+{#if removeMsg}
+  <p class="remove-msg">{removeMsg}</p>
+{/if}
+{#if detectMsg}
+  <p class="remove-msg">{detectMsg}</p>
+{/if}
 
-  {#if error}
-    <p class="error">{error}</p>
-  {:else if !table}
-    <p class="loading">Loading…</p>
-  {:else}
-    {@const entries = Object.entries(table.mountpoints)}
-    <div class="table-wrap">
-      <table>
-        <thead>
+{#if error}
+  <p class="error">{error}</p>
+{:else if !table}
+  <p class="loading">Loading…</p>
+{:else}
+  {@const entries = Object.entries(table.mountpoints)}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Mountpoint</th>
+          <th>Identifier</th>
+          <th>Format</th>
+          <th>Nav system</th>
+          <th>Position</th>
+          <th>Status</th>
+          <th>Latency</th>
+          <th>Auth</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#if entries.length === 0}
+          <tr><td colspan="9" class="empty">No mountpoints configured.</td></tr>
+        {/if}
+        {#each entries as [key, mnt] (key)}
+          {@const live = liveInfo(key)}
+          {@const authEntry = authFor(key)}
           <tr>
-            <th>Mountpoint</th>
-            <th>Identifier</th>
-            <th>Format</th>
-            <th>Format details</th>
-            <th>Nav system</th>
-            <th>Position</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#if entries.length === 0}
-            <tr><td colspan="8" class="empty">No mountpoints configured.</td></tr>
-          {/if}
-          {#each entries as [key, mnt] (key)}
-            {@const live = liveInfo(key)}
-            <tr>
-              <td class="mono">{key}</td>
-              <td>{strField(mnt.str, 2)}</td>
-              <td class="mono">{strField(mnt.str, 3)}</td>
-              <td class="mono details">{strField(mnt.str, 4) || '—'}</td>
-              <td class="mono">{strField(mnt.str, 6)}</td>
-              <td class="mono">{mnt.lat.toFixed(4)}, {mnt.lon.toFixed(4)}</td>
-              <td>
-                {#if mnt.virtual}
-                  <span class="badge badge-virtual">virtual</span>
-                {:else if live}
-                  <span class="badge badge-connected">connected</span>
-                {:else}
-                  <span class="badge badge-disconnected">no source</span>
+            <td class="mono">{key}</td>
+            <td>{strField(mnt.str, 2)}</td>
+            <td class="mono">{strField(mnt.str, 3)}</td>
+            <td class="mono">{strField(mnt.str, 6)}</td>
+            <td class="mono">{mnt.lat.toFixed(4)}, {mnt.lon.toFixed(4)}</td>
+            <td>
+              {#if mnt.virtual}
+                <span class="badge badge-virtual">virtual</span>
+              {:else if live}
+                <span class="badge badge-connected">connected</span>
+              {:else}
+                <span class="badge badge-disconnected">no source</span>
+              {/if}
+            </td>
+            <td class="mono">{mnt.virtual ? '—' : formatLatency(live)}</td>
+            <td>
+              {#if mnt.virtual}
+                <span class="auth-na">n/a</span>
+              {:else if editingAuth === key}
+                <div class="auth-edit">
+                  <input class="edit-input" bind:value={authForm.auth_user} placeholder="user" />
+                  <input class="edit-input" bind:value={authForm.auth_password} placeholder="password" />
+                </div>
+                {#if authMsg}<div class="auth-msg">{authMsg}</div>{/if}
+              {:else if authEntry}
+                <span class="mono">{authEntry.user} / ••••••••</span>
+              {:else}
+                <span class="auth-na">none set</span>
+              {/if}
+            </td>
+            <td class="actions">
+              {#if !mnt.virtual && editingAuth === key}
+                <button class="save-btn" onclick={() => saveAuth(key)} disabled={savingAuth}>
+                  {savingAuth ? '…' : 'Save'}
+                </button>
+                <button class="cancel-btn" onclick={cancelAuthEdit} disabled={savingAuth}>Cancel</button>
+              {:else}
+                {#if !mnt.virtual}
+                  <button class="auth-btn" onclick={() => startAuthEdit(key)} title={authEntry ? 'Edit' : 'Add'}>
+                    {#if authEntry}<Pencil size={14} />{:else}<Plus size={14} />{/if}
+                  </button>
                 {/if}
-              </td>
-              <td class="actions">
                 {#if live && strField(mnt.str, 3) === 'RTCM3'}
                   <button
                     class="detect-btn"
@@ -229,35 +309,26 @@
                   class="remove-btn"
                   onclick={() => removeSource(key)}
                   disabled={removing.has(key)}
+                  title="Remove"
                 >
-                  {removing.has(key) ? '…' : 'Remove'}
+                  {#if removing.has(key)}…{:else}<Trash2 size={14} />{/if}
                 </button>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-    <p class="count">{entries.length} mountpoint{entries.length === 1 ? '' : 's'}</p>
-  {/if}
-</div>
+              {/if}
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
+  <p class="count">{entries.length} mountpoint{entries.length === 1 ? '' : 's'}</p>
+{/if}
 
 <style>
-  .page {
-    padding: 2rem;
-  }
-
   .header {
     display: flex;
     align-items: center;
     gap: 1.5rem;
     margin-bottom: 1.5rem;
-  }
-
-  h2 {
-    margin: 0;
-    color: #e2e8f0;
-    font-size: 1.2rem;
   }
 
   .controls {
@@ -297,6 +368,10 @@
   }
 
   .add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.4rem;
     background: #1a3a1a;
     border-color: #22c55e;
     color: #86efac;
@@ -342,6 +417,13 @@
     border-color: #2563eb;
   }
 
+  .edit-input {
+    width: 90px;
+    padding: 0.3rem 0.45rem;
+    font-family: monospace;
+    font-size: 0.8rem;
+  }
+
   .form-actions {
     display: flex;
     align-items: center;
@@ -366,16 +448,73 @@
     color: #64748b;
   }
 
-  .details {
-    max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   .actions {
     display: flex;
+    align-items: center;
     gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .auth-edit {
+    display: flex;
+    gap: 0.3rem;
+  }
+
+  .auth-msg {
+    font-size: 0.72rem;
+    color: #fca5a5;
+    margin-top: 0.2rem;
+  }
+
+  .auth-na {
+    color: #475569;
+    font-size: 0.78rem;
+  }
+
+  .auth-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem;
+    background: transparent;
+    border: 1px solid #1e3a5f;
+    border-radius: 4px;
+    color: #93c5fd;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 120ms;
+  }
+
+  .auth-btn:hover:not(:disabled) {
+    background: #1e3a5f33;
+  }
+
+  .save-btn {
+    padding: 0.25rem 0.6rem;
+    background: #1a3a1a;
+    border: 1px solid #22c55e;
+    border-radius: 4px;
+    color: #86efac;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+
+  .save-btn:hover:not(:disabled) {
+    background: #14532d;
+  }
+
+  .cancel-btn {
+    padding: 0.25rem 0.6rem;
+    background: transparent;
+    border: 1px solid #2a2d3a;
+    border-radius: 4px;
+    color: #94a3b8;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+
+  .cancel-btn:hover:not(:disabled) {
+    background: #22263a;
   }
 
   .detect-btn {
@@ -399,7 +538,10 @@
   }
 
   .remove-btn {
-    padding: 0.25rem 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem;
     background: transparent;
     border: 1px solid #7f1d1d;
     border-radius: 4px;

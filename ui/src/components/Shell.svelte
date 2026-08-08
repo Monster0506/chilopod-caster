@@ -3,8 +3,6 @@
   import { getCredentials, clearCredentials } from '../lib/api.js';
   import Dashboard from '../pages/Dashboard.svelte';
   import Connections from '../pages/Connections.svelte';
-  import Mountpoints from '../pages/Mountpoints.svelte';
-  import Auth from '../pages/Auth.svelte';
   import Settings from '../pages/Settings.svelte';
 
   let { onLogout } = $props();
@@ -14,16 +12,12 @@
   const pages = {
     dashboard:   Dashboard,
     connections: Connections,
-    mountpoints: Mountpoints,
-    auth:        Auth,
     settings:    Settings,
   };
 
   const navItems = [
     { id: 'dashboard',   label: 'Dashboard' },
     { id: 'connections', label: 'Connections' },
-    { id: 'mountpoints', label: 'Mountpoints' },
-    { id: 'auth',        label: 'Auth' },
     { id: 'settings',    label: 'Settings' },
   ];
 

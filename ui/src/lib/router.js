@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 
-const VALID = ['dashboard', 'connections', 'mountpoints', 'auth', 'settings'];
+const VALID = ['dashboard', 'connections', 'settings'];
 
 function current() {
   const h = location.hash.slice(1);
