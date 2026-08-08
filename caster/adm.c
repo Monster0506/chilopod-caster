@@ -145,18 +145,23 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 		if (!strcmp(st->content_type, "application/json"))
 			json_post = 1;
 
-		if (!st->content) {
-			request_free(req);
-			*err = 400;
-			return -1;
-		}
 		if (!strcmp(st->content_type, "application/x-www-form-urlencoded")) {
+			/*
+			 * A urlencoded body may legitimately be empty when authenticating
+			 * via the Authorization header with no other params (e.g. POST
+			 * /reload with no arguments) -- hash_from_urlencoding(NULL) is
+			 * safe and returns an empty hash.
+			 */
 			req->hash = hash_from_urlencoding(st->content);
 			if (!req->hash) {
 				request_free(req);
 				*err = 503;
 				return -1;
 			}
+		} else if (!st->content) {
+			request_free(req);
+			*err = 400;
+			return -1;
 		}
 	} else if (!strcmp(method, "GET")
 			&& (st->query_string || !strncmp(uri, "/api/v1/", 8))) {
