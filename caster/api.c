@@ -474,6 +474,33 @@ struct mime_content *api_auth_set_json(struct caster_state *caster, struct reque
 }
 
 /*
+ * Remove a source_auth_file entry by mountpoint.
+ */
+struct mime_content *api_auth_remove_json(struct caster_state *caster, struct request *req) {
+	struct config *config = req->st->config;
+	char *mountpoint = (char *)hash_table_get(req->hash, "mountpoint");
+
+	if (!mountpoint || !*mountpoint)
+		return api_error_json("mountpoint is required");
+	if (!field_is_safe(mountpoint))
+		return api_error_json("invalid characters in mountpoint");
+
+	int removed = remove_matching_lines(caster->config_dir, config->source_auth_filename, ':', 0, mountpoint);
+	if (removed < 0)
+		return api_error_json("cannot rewrite source_auth_file");
+	if (removed == 0) {
+		req->status = 404;
+		return api_error_json("mountpoint not found");
+	}
+
+	int r = caster_reload(caster);
+	char result[40];
+	snprintf(result, sizeof result, "{\"result\": %d}\n", r);
+	char *rs = mystrdup(result);
+	return mime_new(rs, -1, "application/json", 1);
+}
+
+/*
  * Rewrite the sourcetable line for mountpoint (matched on field 1), replacing
  * field target_field with new_value. Returns 1 if a line was updated, 0 if
  * no matching line was found, -1 on I/O error.
