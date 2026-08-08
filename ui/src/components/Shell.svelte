@@ -3,6 +3,7 @@
   import { getCredentials, clearCredentials } from '../lib/api.js';
   import Dashboard from '../pages/Dashboard.svelte';
   import Connections from '../pages/Connections.svelte';
+  import Map from '../pages/Map.svelte';
   import Log from '../pages/Log.svelte';
   import Settings from '../pages/Settings.svelte';
 
@@ -13,6 +14,7 @@
   const pages = {
     dashboard:   Dashboard,
     connections: Connections,
+    map:         Map,
     log:         Log,
     settings:    Settings,
   };
@@ -20,6 +22,7 @@
   const navItems = [
     { id: 'dashboard',   label: 'Dashboard' },
     { id: 'connections', label: 'Connections' },
+    { id: 'map',         label: 'Map' },
     { id: 'log',         label: 'Log' },
     { id: 'settings',    label: 'Settings' },
   ];

@@ -59,6 +59,11 @@ static json_object *api_ntrip_json(struct ntrip_state *st) {
 		 */
 		if (st->virtual_mountpoint)
 			json_object_object_add_ex(new_obj, "assigned_base", json_object_new_string(st->virtual_mountpoint), JSON_C_CONSTANT_NEW);
+
+		if (st->last_pos_valid) {
+			json_object_object_add_ex(new_obj, "lat", json_object_new_double(st->last_pos.lat), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(new_obj, "lon", json_object_new_double(st->last_pos.lon), JSON_C_CONSTANT_NEW);
+		}
 	}
 
 	if (st->user_agent)

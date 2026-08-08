@@ -21,7 +21,7 @@ webroots:
   - uri:		/example-well-known/
     path:		webroot/
 
-log_level:	DEBUG
+log_level:	EDEBUG
 
 admin_user:	admin
 
