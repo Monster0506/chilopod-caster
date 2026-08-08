@@ -383,6 +383,82 @@ static int remove_matching_lines(const char *dir, const char *filename, char sep
 }
 
 /*
+ * Rewrite the value of a top-level "key: value" scalar line in a YAML file
+ * (matched at the start of a line, unindented), preserving every other line
+ * including comments, and any trailing inline "# comment" on the matched
+ * line itself. Appends a new "key: value" line at the end if the key isn't
+ * present (e.g. an optional field using its compiled-in default).
+ * Returns 1 if a line was replaced, 0 if appended, -1 on I/O error.
+ */
+static int set_yaml_scalar(const char *path, const char *key, const char *value) {
+	FILE *in = fopen(path, "r");
+	if (in == NULL)
+		return -1;
+
+	size_t tmp_len = strlen(path) + 5;
+	char *tmp_path = (char *)strmalloc(tmp_len);
+	snprintf(tmp_path, tmp_len, "%s.tmp", path);
+	FILE *out = fopen(tmp_path, "w");
+	if (out == NULL) {
+		fclose(in);
+		strfree(tmp_path);
+		return -1;
+	}
+
+	char *line = NULL;
+	size_t linecap = 0;
+	ssize_t linelen;
+	int found = 0;
+	size_t klen = strlen(key);
+
+	while ((linelen = getline(&line, &linecap, in)) >= 0) {
+		if (!found && !strncmp(line, key, klen) && line[klen] == ':') {
+			char *comment = strchr(line + klen + 1, '#');
+			if (comment)
+				fprintf(out, "%s:\t%s\t%s", key, value, comment);
+			else
+				fprintf(out, "%s:\t%s\n", key, value);
+			found = 1;
+		} else {
+			fwrite(line, 1, linelen, out);
+		}
+	}
+	free(line);
+	if (!found)
+		fprintf(out, "%s:\t%s\n", key, value);
+
+	fclose(in);
+	fclose(out);
+
+	if (rename(tmp_path, path) < 0) {
+		strfree(tmp_path);
+		return -1;
+	}
+	strfree(tmp_path);
+	return found;
+}
+
+static const struct { const char *name; int level; } LOG_LEVELS[] = {
+	{ "EMERG", LOG_EMERG }, { "ALERT", LOG_ALERT }, { "CRIT", LOG_CRIT },
+	{ "ERR", LOG_ERR }, { "WARNING", LOG_WARNING }, { "NOTICE", LOG_NOTICE },
+	{ "INFO", LOG_INFO }, { "DEBUG", LOG_DEBUG }, { "EDEBUG", LOG_EDEBUG },
+};
+
+static const char *log_level_name(int level) {
+	for (unsigned i = 0; i < sizeof(LOG_LEVELS)/sizeof(LOG_LEVELS[0]); i++)
+		if (LOG_LEVELS[i].level == level)
+			return LOG_LEVELS[i].name;
+	return NULL;
+}
+
+static int log_level_from_name(const char *name) {
+	for (unsigned i = 0; i < sizeof(LOG_LEVELS)/sizeof(LOG_LEVELS[0]); i++)
+		if (!strcasecmp(LOG_LEVELS[i].name, name))
+			return LOG_LEVELS[i].level;
+	return -1;
+}
+
+/*
  * Drop any active source connections pushing to the given mountpoint.
  */
 static int drop_source_connections(struct caster_state *caster, const char *mountpoint) {
@@ -471,6 +547,143 @@ struct mime_content *api_auth_set_json(struct caster_state *caster, struct reque
 	struct mime_content *m = mime_new(s, -1, "application/json", 1);
 	json_object_put(j);
 	return m;
+}
+
+/*
+ * Return the current caster.yaml scalar settings as a JSON object.
+ */
+struct mime_content *api_settings_get_json(struct caster_state *caster, struct request *req) {
+	struct config *config = req->st->config;
+	json_object *j = json_object_new_object();
+	const char *ll = log_level_name(config->log_level);
+
+	json_object_object_add_ex(j, "log_level", json_object_new_string(ll ? ll : "UNKNOWN"), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "hysteresis_m", json_object_new_double(config->hysteresis_m), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "backlog_socket", json_object_new_int64((long long)config->backlog_socket), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "backlog_evbuffer", json_object_new_int64((long long)config->backlog_evbuffer), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "admin_user", json_object_new_string(config->admin_user), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "idle_max_delay", json_object_new_int(config->idle_max_delay), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "reconnect_delay", json_object_new_int(config->reconnect_delay), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "min_raw_packet", json_object_new_int(config->min_raw_packet), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "max_raw_packet", json_object_new_int(config->max_raw_packet), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "http_header_max_size", json_object_new_int64((long long)config->http_header_max_size), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "http_content_length_max", json_object_new_int64((long long)config->http_content_length_max), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "sourcetable_priority", json_object_new_int(config->sourcetable_priority), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "on_demand_source_timeout", json_object_new_int(config->on_demand_source_timeout), JSON_C_CONSTANT_NEW);
+
+	json_object_object_add_ex(j, "trusted_http_ip_header",
+		config->trusted_http_ip_header ? json_object_new_string(config->trusted_http_ip_header) : json_object_new_null(),
+		JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "host_auth_filename",
+		config->host_auth_filename ? json_object_new_string(config->host_auth_filename) : json_object_new_null(),
+		JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "source_auth_filename", json_object_new_string(config->source_auth_filename), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "blocklist_filename",
+		config->blocklist_filename ? json_object_new_string(config->blocklist_filename) : json_object_new_null(),
+		JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "sourcetable_filename", json_object_new_string(config->sourcetable_filename), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "access_log",
+		config->access_log ? json_object_new_string(config->access_log) : json_object_new_null(),
+		JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "log",
+		config->log ? json_object_new_string(config->log) : json_object_new_null(),
+		JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "ui_dir",
+		config->ui_dir ? json_object_new_string(config->ui_dir) : json_object_new_null(),
+		JSON_C_CONSTANT_NEW);
+
+	char *s = mystrdup(json_object_to_json_string(j));
+	struct mime_content *m = mime_new(s, -1, "application/json", 1);
+	json_object_put(j);
+	return m;
+}
+
+/*
+ * Create or update one or more caster.yaml scalar settings, then reload.
+ * Accepts any subset of the fields returned by api_settings_get_json.
+ * Each provided field is validated and written to caster->config_file via
+ * set_yaml_scalar before caster_reload() picks it up.
+ */
+struct mime_content *api_settings_set_json(struct caster_state *caster, struct request *req) {
+	static const char *STRING_FIELDS[] = {
+		"admin_user", "trusted_http_ip_header", "host_auth_filename",
+		"source_auth_filename", "blocklist_filename", "sourcetable_filename",
+		"access_log", "log", "ui_dir", NULL
+	};
+	static const char *INT_FIELDS[] = {
+		"idle_max_delay", "reconnect_delay", "min_raw_packet", "max_raw_packet",
+		"sourcetable_priority", "on_demand_source_timeout", NULL
+	};
+	static const char *SIZE_FIELDS[] = {
+		"backlog_socket", "backlog_evbuffer", "http_header_max_size",
+		"http_content_length_max", NULL
+	};
+
+	int changed = 0;
+	char *end;
+
+	char *log_level = (char *)hash_table_get(req->hash, "log_level");
+	if (log_level) {
+		if (log_level_from_name(log_level) < 0)
+			return api_error_json("invalid log_level");
+		if (set_yaml_scalar(caster->config_file, "log_level", log_level) < 0)
+			return api_error_json("cannot rewrite config file");
+		changed = 1;
+	}
+
+	char *hysteresis_m = (char *)hash_table_get(req->hash, "hysteresis_m");
+	if (hysteresis_m) {
+		strtod(hysteresis_m, &end);
+		if (end == hysteresis_m || *end)
+			return api_error_json("hysteresis_m must be a number");
+		if (set_yaml_scalar(caster->config_file, "hysteresis_m", hysteresis_m) < 0)
+			return api_error_json("cannot rewrite config file");
+		changed = 1;
+	}
+
+	for (int i = 0; STRING_FIELDS[i]; i++) {
+		char *value = (char *)hash_table_get(req->hash, STRING_FIELDS[i]);
+		if (!value)
+			continue;
+		if (!*value || !field_is_safe(value))
+			return api_error_json("invalid or empty value for a setting");
+		if (set_yaml_scalar(caster->config_file, STRING_FIELDS[i], value) < 0)
+			return api_error_json("cannot rewrite config file");
+		changed = 1;
+	}
+
+	for (int i = 0; INT_FIELDS[i]; i++) {
+		char *value = (char *)hash_table_get(req->hash, INT_FIELDS[i]);
+		if (!value)
+			continue;
+		strtol(value, &end, 10);
+		if (end == value || *end)
+			return api_error_json("a numeric setting is not a valid integer");
+		if (set_yaml_scalar(caster->config_file, INT_FIELDS[i], value) < 0)
+			return api_error_json("cannot rewrite config file");
+		changed = 1;
+	}
+
+	for (int i = 0; SIZE_FIELDS[i]; i++) {
+		char *value = (char *)hash_table_get(req->hash, SIZE_FIELDS[i]);
+		if (!value)
+			continue;
+		unsigned long v = strtoul(value, &end, 10);
+		if (end == value || *end || v == 0)
+			return api_error_json("a size setting must be a positive integer");
+		if (set_yaml_scalar(caster->config_file, SIZE_FIELDS[i], value) < 0)
+			return api_error_json("cannot rewrite config file");
+		changed = 1;
+	}
+
+	if (!changed)
+		return api_error_json("no settings provided");
+
+	int r = caster_reload(caster);
+	char result[40];
+	snprintf(result, sizeof result, "{\"result\": %d}\n", r);
+	char *rs = mystrdup(result);
+	return mime_new(rs, -1, "application/json", 1);
 }
 
 /*

@@ -215,6 +215,7 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 			{"/api/v1/mem","GET", api_mem_json},
 			{"/api/v1/nodes","GET", api_nodes_json},
 			{"/api/v1/auth", "GET", api_auth_list_json},
+			{"/api/v1/settings", "GET", api_settings_get_json},
 			{"/api/v1/livesources", "GET", livesource_list_json},
 			{"/api/v1/sourcetables", "GET", sourcetable_list_json},
 			{"/api/v1/reload", "POST", api_reload_json},
@@ -223,6 +224,7 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 			{"/api/v1/sources/remove", "POST", api_remove_source_json},
 			{"/api/v1/sources/detect", "POST", api_detect_source_json},
 			{"/api/v1/auth", "POST", api_auth_set_json},
+			{"/api/v1/settings", "POST", api_settings_set_json},
 			{NULL, NULL, NULL}
 		};
 
