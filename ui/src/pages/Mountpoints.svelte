@@ -51,13 +51,6 @@
     return str.split(';')[i] ?? '';
   }
 
-  function formatBytes(n) {
-    if (n == null) return '—';
-    if (n < 1024) return n + ' B';
-    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
-    return (n / 1048576).toFixed(1) + ' MB';
-  }
-
   async function submitForm() {
     formMsg = '';
     if (!form.mountpoint || !form.source_password) {
@@ -196,13 +189,12 @@
             <th>Nav system</th>
             <th>Position</th>
             <th>Status</th>
-            <th>Received</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {#if entries.length === 0}
-            <tr><td colspan="9" class="empty">No mountpoints configured.</td></tr>
+            <tr><td colspan="8" class="empty">No mountpoints configured.</td></tr>
           {/if}
           {#each entries as [key, mnt] (key)}
             {@const live = liveInfo(key)}
@@ -222,7 +214,6 @@
                   <span class="badge badge-disconnected">no source</span>
                 {/if}
               </td>
-              <td class="mono">{live ? formatBytes(live.received_bytes) : '—'}</td>
               <td class="actions">
                 {#if live && strField(mnt.str, 3) === 'RTCM3'}
                   <button
