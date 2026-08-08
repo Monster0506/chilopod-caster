@@ -1,12 +1,37 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
 
+  const TYPES = [
+    { value: 'client', label: 'Clients' },
+    { value: 'source', label: 'Sources' },
+    { value: 'source_fetcher', label: 'Fetchers' },
+    { value: 'adm', label: 'Admin' },
+  ];
+
   let data = $state(null);
   let error = $state('');
   let autoRefresh = $state(true);
-  let typeFilter = $state('all');
+  let selectedTypes = $state(new Set(['client', 'source', 'source_fetcher']));
+  let filterOpen = $state(false);
+  let filterEl;
   let dropping = $state(new Set());
   let dropMsg = $state('');
+
+  function toggleType(t) {
+    const next = new Set(selectedTypes);
+    if (next.has(t)) next.delete(t);
+    else next.add(t);
+    selectedTypes = next;
+  }
+
+  $effect(() => {
+    if (!filterOpen) return;
+    function onDocClick(e) {
+      if (filterEl && !filterEl.contains(e.target)) filterOpen = false;
+    }
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  });
 
   async function fetchAll() {
     try {
@@ -50,9 +75,7 @@
   }
 
   function rows(net) {
-    const all = Object.values(net);
-    if (typeFilter === 'all') return all;
-    return all.filter(c => c.type === typeFilter);
+    return Object.values(net).filter(c => selectedTypes.has(c.type));
   }
 
   $effect(() => {
@@ -67,13 +90,25 @@
   <div class="header">
     <h2>Connections</h2>
     <div class="controls">
-      <select bind:value={typeFilter}>
-        <option value="all">All types</option>
-        <option value="client">Clients</option>
-        <option value="source">Sources</option>
-        <option value="source_fetcher">Fetchers</option>
-        <option value="adm">Admin</option>
-      </select>
+      <div class="type-filter" bind:this={filterEl}>
+        <button type="button" class="filter-toggle" onclick={() => (filterOpen = !filterOpen)}>
+          Types ({selectedTypes.size}) <span class="caret">▾</span>
+        </button>
+        {#if filterOpen}
+          <div class="filter-panel">
+            {#each TYPES as t (t.value)}
+              <label class="filter-option">
+                <input
+                  type="checkbox"
+                  checked={selectedTypes.has(t.value)}
+                  onchange={() => toggleType(t.value)}
+                />
+                {t.label}
+              </label>
+            {/each}
+          </div>
+        {/if}
+      </div>
       <label class="toggle">
         <input type="checkbox" bind:checked={autoRefresh} />
         Auto-refresh
@@ -163,7 +198,14 @@
     gap: 1rem;
   }
 
-  select {
+  .type-filter {
+    position: relative;
+  }
+
+  .filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
     padding: 0.35rem 0.6rem;
     background: #1a1d27;
     border: 1px solid #2a2d3a;
@@ -171,6 +213,48 @@
     color: #94a3b8;
     font-size: 0.85rem;
     cursor: pointer;
+  }
+
+  .filter-toggle:hover {
+    border-color: #3a3d4a;
+  }
+
+  .caret {
+    font-size: 0.7rem;
+    color: #475569;
+  }
+
+  .filter-panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 10;
+    min-width: 150px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    background: #1a1d27;
+    border: 1px solid #2a2d3a;
+    border-radius: 6px;
+    padding: 0.4rem;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  }
+
+  .filter-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .filter-option:hover {
+    background: #22263a;
+    color: #e2e8f0;
   }
 
   .toggle {
