@@ -2,10 +2,7 @@
   import { onMount } from 'svelte';
   import { apiGet } from '../lib/api.js';
   import L from 'leaflet';
-  import 'leaflet.markercluster';
   import 'leaflet/dist/leaflet.css';
-  import 'leaflet.markercluster/dist/MarkerCluster.css';
-  import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
   let table = $state(null);
   let net = $state(null);
@@ -14,8 +11,8 @@
 
   let mapEl;
   let map;
-  let baseClusterGroup;
-  let roverClusterGroup;
+  let baseLayer;
+  let roverLayer;
   let fitted = false;
 
   function escapeHtml(s) {
@@ -90,8 +87,8 @@
 
   function rebuildMarkers() {
     if (!map) return;
-    baseClusterGroup.clearLayers();
-    roverClusterGroup.clearLayers();
+    baseLayer.clearLayers();
+    roverLayer.clearLayers();
 
     const bounds = [];
 
@@ -106,7 +103,7 @@
           `<span class="map-popup-mono">${b.lat.toFixed(5)}, ${b.lon.toFixed(5)}</span>`,
         { autoPan: false }
       );
-      baseClusterGroup.addLayer(marker);
+      baseLayer.addLayer(marker);
       bounds.push([b.lat, b.lon]);
     }
 
@@ -121,7 +118,7 @@
           `<span class="map-popup-mono">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span>`,
         { autoPan: false }
       );
-      roverClusterGroup.addLayer(marker);
+      roverLayer.addLayer(marker);
       bounds.push([r.lat, r.lon]);
     }
 
@@ -143,15 +140,13 @@
       maxZoom: 19,
     });
 
-    baseClusterGroup = L.markerClusterGroup();
-    roverClusterGroup = L.markerClusterGroup();
-    baseClusterGroup.addTo(map);
-    roverClusterGroup.addTo(map);
+    baseLayer = L.layerGroup().addTo(map);
+    roverLayer = L.layerGroup().addTo(map);
 
     L.control
       .layers(
         { Satellite: satellite, Street: street },
-        { 'Base stations': baseClusterGroup, Rovers: roverClusterGroup }
+        { 'Base stations': baseLayer, Rovers: roverLayer }
       )
       .addTo(map);
 
@@ -347,6 +342,7 @@
     border-radius: 50%;
     border: 2px solid #0f1117;
     box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+    opacity: 0.82;
   }
 
   :global(.map-popup-mono) {
@@ -361,11 +357,5 @@
 
   :global(.leaflet-popup-tip) {
     background: #1a1d27;
-  }
-
-  :global(.marker-cluster-small),
-  :global(.marker-cluster-medium),
-  :global(.marker-cluster-large) {
-    background-clip: padding-box;
   }
 </style>
