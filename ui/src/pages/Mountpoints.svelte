@@ -73,7 +73,7 @@
         showForm = false;
         await fetchAll();
       } else {
-        formMsg = res.error ?? 'Failed to add source.';
+        formMsg = res.error ?? 'Failed to add mountpoint.';
       }
     } catch (e) {
       formMsg = `Failed: ${e.message}`;
@@ -90,7 +90,7 @@
       const res = await apiPost('sources/remove', { mountpoint });
       removeMsg = res.result === 0
         ? `Removed ${mountpoint}${res.dropped_connections ? ` (dropped ${res.dropped_connections} active connection)` : ''}.`
-        : (res.error ?? 'Failed to remove source.');
+        : (res.error ?? 'Failed to remove mountpoint.');
       await fetchAll();
     } catch (e) {
       removeMsg = `Failed: ${e.message}`;
@@ -127,7 +127,7 @@
 
 <div class="page">
   <div class="header">
-    <h2>Sources</h2>
+    <h2>Mountpoints</h2>
     <div class="controls">
       <label class="toggle">
         <input type="checkbox" bind:checked={autoRefresh} />
@@ -135,7 +135,7 @@
       </label>
       <button onclick={fetchAll}>Refresh</button>
       <button class="add-btn" onclick={() => (showForm = !showForm)}>
-        {showForm ? 'Cancel' : '+ Add Source'}
+        {showForm ? 'Cancel' : '+ Add Mountpoint'}
       </button>
     </div>
   </div>
@@ -159,7 +159,7 @@
         <label>Bitrate <input bind:value={form.bitrate} /></label>
       </div>
       <div class="form-actions">
-        <button type="submit" disabled={submitting}>{submitting ? 'Adding…' : 'Add source'}</button>
+        <button type="submit" disabled={submitting}>{submitting ? 'Adding…' : 'Add mountpoint'}</button>
         {#if formMsg}<span class="form-msg">{formMsg}</span>{/if}
       </div>
       <p class="hint">
@@ -202,7 +202,7 @@
         </thead>
         <tbody>
           {#if entries.length === 0}
-            <tr><td colspan="9" class="empty">No sources configured.</td></tr>
+            <tr><td colspan="9" class="empty">No mountpoints configured.</td></tr>
           {/if}
           {#each entries as [key, mnt] (key)}
             {@const live = liveInfo(key)}
