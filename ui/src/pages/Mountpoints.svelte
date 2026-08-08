@@ -18,6 +18,7 @@
   let editingAuth = $state(null);
   let authForm = $state({ auth_user: '', auth_password: '' });
   let savingAuth = $state(false);
+  let revealed = $state(new Set());
   let authMsg = $state('');
 
   const blankForm = {
@@ -131,6 +132,13 @@
     }
   }
 
+  function toggleReveal(mountpoint) {
+    const next = new Set(revealed);
+    if (next.has(mountpoint)) next.delete(mountpoint);
+    else next.add(mountpoint);
+    revealed = next;
+  }
+
   function startAuthEdit(mountpoint) {
     const existing = authFor(mountpoint);
     editingAuth = mountpoint;
@@ -207,13 +215,6 @@
       <button type="submit" disabled={submitting}>{submitting ? 'Adding…' : 'Add mountpoint'}</button>
       {#if formMsg}<span class="form-msg">{formMsg}</span>{/if}
     </div>
-    <p class="hint">
-      New mountpoints only appear below once a source actually connects and pushes data --
-      registering it here just makes the caster ready to accept the push. Format details and
-      position don't need to be exact for RTCM3 sources -- an approximate lat/lon is fine,
-      Format details can be left blank, and "Detect" (once connected) fetches both from what
-      the caster actually decodes.
-    </p>
   </form>
 {/if}
 
@@ -278,7 +279,17 @@
                 </div>
                 {#if authMsg}<div class="auth-msg">{authMsg}</div>{/if}
               {:else if authEntry}
-                <span class="mono">{authEntry.user} / ••••••••</span>
+                <span class="mono">
+                  {authEntry.user} /
+                  <button
+                    type="button"
+                    class="reveal-btn"
+                    onclick={() => toggleReveal(key)}
+                    title={revealed.has(key) ? 'Click to hide' : 'Click to reveal'}
+                  >
+                    {revealed.has(key) ? authEntry.password : '••••••••'}
+                  </button>
+                </span>
               {:else}
                 <span class="auth-na">none set</span>
               {/if}
@@ -436,12 +447,6 @@
     color: #94a3b8;
   }
 
-  .hint {
-    margin: 0.75rem 0 0;
-    font-size: 0.78rem;
-    color: #475569;
-  }
-
   .remove-msg {
     margin: 0 0 1rem;
     font-size: 0.85rem;
@@ -469,6 +474,20 @@
   .auth-na {
     color: #475569;
     font-size: 0.78rem;
+  }
+
+  .reveal-btn {
+    padding: 0;
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    font-family: monospace;
+    cursor: pointer;
+  }
+
+  .reveal-btn:hover {
+    color: #e2e8f0;
   }
 
   .auth-btn {
