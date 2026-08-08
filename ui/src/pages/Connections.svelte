@@ -57,13 +57,6 @@
     }
   }
 
-  function formatBytes(n) {
-    if (n == null) return '—';
-    if (n < 1024) return n + ' B';
-    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
-    return (n / 1048576).toFixed(1) + ' MB';
-  }
-
   function formatDuration(start) {
     if (!start) return '—';
     const sec = Math.floor((Date.now() - new Date(start).getTime()) / 1000);
@@ -72,6 +65,12 @@
     const h = Math.floor(sec / 3600);
     const m = Math.floor((sec % 3600) / 60);
     return h + 'h ' + m + 'm';
+  }
+
+  function formatLatency(conn) {
+    const rtt = conn.tcp_info?.rtt;
+    if (rtt == null) return '—';
+    return (rtt / 1000).toFixed(1) + ' ms';
   }
 
   function formatMountpoint(conn) {
@@ -139,9 +138,9 @@
             <th>ID</th>
             <th>Type</th>
             <th>IP</th>
+            <th>Latency</th>
             <th>Mountpoint</th>
             <th>User</th>
-            <th>Received</th>
             <th>Connected</th>
             <th></th>
           </tr>
@@ -155,9 +154,9 @@
               <td class="mono">{conn.id}</td>
               <td><span class="badge badge-{conn.type}">{conn.type}</span></td>
               <td class="mono">{conn.ip}</td>
+              <td class="mono">{formatLatency(conn)}</td>
               <td class="mono" title={conn.assigned_base ? `Requested ${conn.mountpoint}, assigned ${conn.assigned_base}` : conn.mountpoint}>{formatMountpoint(conn)}</td>
               <td class="mono">{conn.auth_user ?? '—'}</td>
-              <td class="mono">{formatBytes(conn.received_bytes)}</td>
               <td class="mono">{formatDuration(conn.start)}</td>
               <td>
                 <button
