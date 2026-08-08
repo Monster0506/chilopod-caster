@@ -74,9 +74,9 @@
     return h + 'h ' + m + 'm';
   }
 
-  function formatUserAgent(conn) {
-    const ua = conn.user_agent ?? '—';
-    return conn.auth_user ? `${conn.auth_user}/${ua}` : ua;
+  function formatMountpoint(conn) {
+    if (!conn.mountpoint) return '—';
+    return conn.assigned_base ? `${conn.mountpoint} → ${conn.assigned_base}` : conn.mountpoint;
   }
 
   function rows(net) {
@@ -140,26 +140,24 @@
             <th>Type</th>
             <th>IP</th>
             <th>Mountpoint</th>
-            <th>User / Agent</th>
+            <th>User</th>
             <th>Received</th>
-            <th>Sent</th>
             <th>Connected</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {#if list.length === 0}
-            <tr><td colspan="9" class="empty">No connections.</td></tr>
+            <tr><td colspan="8" class="empty">No connections.</td></tr>
           {/if}
           {#each list as conn (conn.id)}
             <tr>
               <td class="mono">{conn.id}</td>
               <td><span class="badge badge-{conn.type}">{conn.type}</span></td>
               <td class="mono">{conn.ip}</td>
-              <td class="mono">{conn.mountpoint ?? '—'}</td>
-              <td class="ua" title={formatUserAgent(conn)}>{formatUserAgent(conn)}</td>
+              <td class="mono" title={conn.assigned_base ? `Requested ${conn.mountpoint}, assigned ${conn.assigned_base}` : conn.mountpoint}>{formatMountpoint(conn)}</td>
+              <td class="mono">{conn.auth_user ?? '—'}</td>
               <td class="mono">{formatBytes(conn.received_bytes)}</td>
-              <td class="mono">{formatBytes(conn.sent_bytes)}</td>
               <td class="mono">{formatDuration(conn.start)}</td>
               <td>
                 <button
@@ -335,13 +333,6 @@
   .mono {
     font-family: monospace;
     font-size: 0.82rem;
-  }
-
-  .ua {
-    max-width: 180px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .badge {

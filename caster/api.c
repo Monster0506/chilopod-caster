@@ -51,6 +51,14 @@ static json_object *api_ntrip_json(struct ntrip_state *st) {
 			json_object_object_add_ex(new_obj, "mountpoint", json_object_new_string(st->mountpoint), JSON_C_CONSTANT_NEW);
 		else
 			json_object_object_add_ex(new_obj, "mountpoint", json_object_new_null(), JSON_C_CONSTANT_NEW);
+
+		/*
+		 * For a client on a virtual (NEAR) mountpoint, the physical base
+		 * it's actually receiving data from right now -- set once NEAR
+		 * has resolved a base, updated on each subsequent switch.
+		 */
+		if (st->virtual_mountpoint)
+			json_object_object_add_ex(new_obj, "assigned_base", json_object_new_string(st->virtual_mountpoint), JSON_C_CONSTANT_NEW);
 	}
 
 	if (st->user_agent)
