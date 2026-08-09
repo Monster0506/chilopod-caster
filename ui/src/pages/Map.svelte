@@ -15,6 +15,7 @@
   let roverLayer;
   let fitted = false;
   let roverMarkers = {};
+  let baseMarkers = {};
 
   const VIEW_STORAGE_KEY = 'chilopod:map:view';
 
@@ -113,11 +114,19 @@
     if (marker) marker.openPopup();
   }
 
+  function flyToBase(b) {
+    if (!map || b.lat == null || b.lon == null) return;
+    map.flyTo([b.lat, b.lon], Math.max(map.getZoom(), 12));
+    const marker = baseMarkers[b.key];
+    if (marker) marker.openPopup();
+  }
+
   function rebuildMarkers() {
     if (!map) return;
     baseLayer.clearLayers();
     roverLayer.clearLayers();
     roverMarkers = {};
+    baseMarkers = {};
 
     const bounds = [];
 
@@ -133,6 +142,7 @@
         { autoPan: false }
       );
       baseLayer.addLayer(marker);
+      baseMarkers[b.key] = marker;
       bounds.push([b.lat, b.lon]);
     }
 
@@ -248,6 +258,41 @@
   <div class="map-container" bind:this={mapEl}></div>
 </div>
 
+<h3 class="table-title">Base stations</h3>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Mountpoint</th>
+        <th>Identifier</th>
+        <th>Status</th>
+        <th>Subscribers</th>
+        <th>Position</th>
+      </tr>
+    </thead>
+    <tbody>
+      {#if baseStations().length === 0}
+        <tr><td colspan="5" class="empty">No base stations declared.</td></tr>
+      {/if}
+      {#each baseStations() as b (b.key)}
+        <tr class="clickable" onclick={() => flyToBase(b)} title="Click to locate on map">
+          <td class="mono">{b.key}</td>
+          <td>{strField(b.str, 2)}</td>
+          <td>
+            {#if b.live}
+              <span class="badge badge-live">live</span>
+            {:else}
+              <span class="badge badge-offline">declared, offline</span>
+            {/if}
+          </td>
+          <td class="mono">{b.subscribers}</td>
+          <td class="mono">{b.lat.toFixed(5)}, {b.lon.toFixed(5)}</td>
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+</div>
+
 <h3 class="table-title">Rover positions</h3>
 <div class="table-wrap">
   <table>
@@ -345,6 +390,28 @@
     margin: 0 0 0.75rem;
     font-size: 0.95rem;
     color: #e2e8f0;
+  }
+
+  .table-title:not(:first-of-type) {
+    margin-top: 2rem;
+  }
+
+  .badge {
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .badge-live {
+    background: #1a3a1a;
+    color: #86efac;
+  }
+
+  .badge-offline {
+    background: #2a2d3a;
+    color: #94a3b8;
   }
 
   .table-wrap {
