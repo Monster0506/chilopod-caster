@@ -1,9 +1,9 @@
 Chilopod 0.8.2
 ===============
 
-Chilopod is a high-performance NTRIP caster written in C for the [Centipede-RTK](https://github.com/CentipedeRTK) project, a network of [RTK](https://en.wikipedia.org/wiki/Real-time_kinematic_positioning) bases based in France (see https://centipede-rtk.org).
+Chilopod is an NTRIP caster written in C. It is derived from the [Centipede-RTK](https://github.com/CentipedeRTK) project, a network of [RTK](https://en.wikipedia.org/wiki/Real-time_kinematic_positioning) bases in France (see https://centipede-rtk.org).
 
-It uses libevent2 for a minimal memory footprint and can handle tens of thousands of NTRIP sessions on a minimal server. Currently runs on FreeBSD and Linux.
+Chilopod uses the libevent2 library. This library keeps the memory footprint small. Chilopod can handle tens of thousands of NTRIP sessions on a minimal server. Chilopod runs on FreeBSD and Linux.
 
 ## Contents
 
@@ -12,7 +12,6 @@ It uses libevent2 for a minimal memory footprint and can handle tens of thousand
 - [Building](#building)
 - [Building the UI](#building-the-ui)
 - [Installation (Debian/Linux)](#installation-debianlinux)
-- [Installation (FreeBSD)](#installation-freebsd)
 - [Running](#running)
 - [How Chilopod Works](#how-chilopod-works)
 - [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source)
@@ -22,18 +21,18 @@ It uses libevent2 for a minimal memory footprint and can handle tens of thousand
 Features
 ========
 
- * "Virtual" "near" base algorithm which picks the nearest base from the source table
+ * "Near" base algorithm: selects the nearest base from the source table
  * High performance
- * Low memory footprint
- * Supports IPv6 and IPv4
- * NTRIP proxy to fetch from an external caster
- * TLS/SSL server and client support
- * "blocklist" with quotas per IP prefix
+ * Small memory footprint
+ * Support for IPv6 and IPv4
+ * NTRIP proxy: fetches sources from an external caster
+ * TLS/SSL support for server and client connections
+ * Blocklist with quotas per IP prefix
  * On-demand stream subscription
- * "wildcard" base configuration to allow unregistered sources to send hidden streams
+ * "Wildcard" base configuration: lets unregistered sources send hidden streams
  * GELF/Graylog export with bulk mode
  * JSON API for remote administration and monitoring
- * API tool `mapi`
+ * API tool: `mapi`
  * Multi-threaded mode
 
 Requirements
@@ -48,13 +47,15 @@ Building Chilopod from source requires a C compiler and `make`, plus:
 | json-c | 0.16 |
 | openssl | 3.0.15 |
 
-A minimal Debian/FreeBSD install has neither a compiler nor these libraries by default -- install them with your platform's package manager:
+A minimal Debian or FreeBSD install does not include a compiler or these libraries by default. Install them with the package manager for your platform.
 
-FreeBSD: `sudo pkg install libevent libcyaml json-c`
+Debian: 
 
-Debian: `sudo apt install build-essential libcyaml-dev libevent-dev libjson-c-dev libssl-dev`
+```sh
+sudo apt install build-essential libcyaml-dev libevent-dev libjson-c-dev libssl-dev
+```
 
-You'll also want `curl` for the admin API examples throughout this README, and `python3` if you use `scripts/rtcm_bridge.py` (see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source)) -- neither ships on a minimal install either:
+This README also uses `curl` in the admin API examples. If you use `scripts/rtcm_bridge.py`, you also need `python3` (see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source)). A minimal install does not include either tool. Install both with:
 
 ```sh
 sudo apt install curl python3
@@ -63,26 +64,22 @@ sudo apt install curl python3
 Building
 ========
 
-FreeBSD: `cd caster; make clean depend all`
+Debian: 
 
-Debian: `cd caster; make clean all`
+```sh
+cd caster; make clean all
+```
 
-This produces two binaries inside `caster/`: `caster` (the daemon itself) and `tests` (the unit test suite -- run `./tests` to verify the build before installing).
+This produces two binaries in `caster/`: `caster`, the daemon, and `tests`, the unit test suite. Run `./tests` to confirm the build before you install it.
 
 Building the UI
 ===============
 
-The pre-built UI is in `ui/dist/` and is committed to the repository -- no Node.js required to deploy.
+The pre-built UI files are in `ui/dist/`. These files are committed to the repository. You do not need Node.js to deploy Chilopod.
 
-To rebuild after making changes to the UI source:
+To rebuild the UI after a change to the source, run: `cd ui; npm install; npm run build`
 
-```sh
-cd ui
-npm install
-npm run build
-```
-
-The output in `ui/dist/` is what gets served at `/adm/ui/`. Copy it to the configured `ui_dir`:
+Chilopod serves the output in `ui/dist/` at `/adm/ui/`. Copy this output to the `ui_dir` directory in the configuration:
 
 ```sh
 cp -r ui/dist/* /usr/local/etc/chilopod/ui/
@@ -91,26 +88,27 @@ cp -r ui/dist/* /usr/local/etc/chilopod/ui/
 Installation (Debian/Linux)
 ==========================
 
-These steps set Chilopod up as a dedicated system service. Run them as root.
+These steps configure Chilopod as a dedicated system service. Run the steps as the root user.
 
 1. Create a `caster` user:
    ```sh
    useradd --system --no-create-home --shell /usr/sbin/nologin caster
    ```
 
-2. Install the binary and `mapi` tool (both go to `/usr/local/sbin/` by default, per the Makefile's `DEST_DIR`):
+2. Install the binary and the `mapi` tool:
    ```sh
    cd caster && make install
    ```
+   Note: By default, the Makefile's `DEST_DIR` variable installs both to `/usr/local/sbin/`.
 
-3. Create config and log directories:
+3. Create the configuration and log directories:
    ```sh
    mkdir -p /usr/local/etc/chilopod
    mkdir -p /var/log/chilopod
    chown caster /var/log/chilopod
    ```
 
-4. Copy sample config files:
+4. Copy the sample configuration files:
    ```sh
    cp sample-config/caster.yaml    /usr/local/etc/chilopod/caster.yaml
    cp sample-config/source.auth    /usr/local/etc/chilopod/source.auth
@@ -119,57 +117,19 @@ These steps set Chilopod up as a dedicated system service. Run them as root.
    cp sample-config/blocklist      /usr/local/etc/chilopod/blocklist
    ```
 
-5. Edit `/usr/local/etc/chilopod/caster.yaml` and `/usr/local/etc/chilopod/source.auth` for your setup -- see [Configuration Reference](#configuration-reference).
+5. Edit `/usr/local/etc/chilopod/caster.yaml` and `/usr/local/etc/chilopod/source.auth` for your setup. For more information, see [Configuration Reference](#configuration-reference).
 
 6. Run the caster:
    ```sh
    /usr/local/sbin/caster -d
    ```
-   Or create a systemd unit -- see [Running](#running).
+   You can also create a systemd unit instead. See [Running](#running).
 
-Installation (FreeBSD)
-======================
-
-These steps set Chilopod up as a dedicated system service. Run them as root.
-
-1. Create a `caster` user:
-   ```sh
-   pw useradd -n caster -d /nonexistent -s /bin/nologin
-   ```
-
-2. Install the binary and `mapi` tool (both go to `/usr/local/sbin/` by default, per the Makefile's `DEST_DIR`):
-   ```sh
-   cd caster && make install
-   ```
-
-3. Create config and log directories:
-   ```sh
-   mkdir -p /usr/local/etc/chilopod
-   mkdir -p /var/log/chilopod
-   chown caster /var/log/chilopod
-   ```
-
-4. Copy sample config files:
-   ```sh
-   cp sample-config/caster.yaml     /usr/local/etc/chilopod/caster.yaml
-   cp sample-config/source.auth     /usr/local/etc/chilopod/source.auth
-   cp sample-config/host.auth       /usr/local/etc/chilopod/host.auth
-   cp sample-config/sourcetable.dat /usr/local/etc/chilopod/sourcetable.dat
-   cp sample-config/blocklist       /usr/local/etc/chilopod/blocklist
-   ```
-
-5. Edit `/usr/local/etc/chilopod/caster.yaml` and `/usr/local/etc/chilopod/source.auth` for your setup -- see [Configuration Reference](#configuration-reference).
-
-6. Install the rc script and enable at boot:
-   ```sh
-   install -m 0755 sample-config/caster.sh /usr/local/etc/rc.d/caster
-   sysrc caster_enable=YES
    ```
 
 Running
 =======
 
-**FreeBSD:** `service caster start`
 
 **Linux (direct):** `/usr/local/sbin/caster -d`
 
@@ -198,41 +158,45 @@ systemctl enable --now caster
 How Chilopod Works
 ===================
 
-A single running caster can fulfill 3 roles simultaneously, all configured from the same `caster.yaml`.
+A single caster instance can perform three roles at the same time. You configure all three roles in the same `caster.yaml` file.
 
 ## Regular NTRIP caster
 
-Configure `sourcetable.dat` for the local sources, `source.auth` for their authentication, and the `listen` section for the IP addresses to listen on.
+To configure this role, do the following:
+
+- Configure `sourcetable.dat` for the local sources.
+- Configure `source.auth` for the source authentication.
+- Configure the `listen` section for the IP addresses to listen on.
 
 ## NTRIP proxy
 
 Configure the `proxy` section with a reference caster.
 
-The local caster will fetch the sourcetable from the reference caster at `table_refresh_delay` (in seconds) intervals, and announce it merged with its own sourcetable.
+The local caster fetches the sourcetable from the reference caster. The fetch interval is `table_refresh_delay` seconds. The local caster announces this sourcetable merged with its own sourcetable.
 
-Sources will be fetched and served to clients on-demand from the reference caster.
+The caster fetches sources from the reference caster on demand and serves them to clients.
 
 ## "NEAR" base
 
-(Previously known as the "V" base)
+(formerly called the "V" base)
 
-Should be declared in the local sourcetable (see default config) with its "virtual" field (12th field) set to "1".
+Declare the NEAR base in the local sourcetable (see the default configuration). Set its "virtual" field (field 12) to "1".
 
-When a NTRIP client connects to this base and announces its location through $G*GGA NMEA lines, the caster will serve it the nearest base from its general sourcetable (local + proxy), switching over time when the client moves.
+When a client connects to this base and sends its location in $G*GGA NMEA lines, the caster serves the nearest base from the general sourcetable. This sourcetable includes local and proxy sources. As the client moves, the caster switches to a new nearest base over time.
 
 Adding a Raw RTCM3 TCP Source
 ==============================
 
-Chilopod's "source" side speaks the NTRIP `SOURCE`/`POST` push protocol. Some GNSS receivers (e.g. many Trimble base stations) instead offer a raw TCP socket that just emits RTCM3 bytes with no NTRIP handshake at all. To feed one of these into the caster as a mountpoint:
+The source side of Chilopod uses the NTRIP `SOURCE`/`POST` push protocol. Some GNSS receivers instead offer a raw TCP socket. This socket sends RTCM3 bytes with no NTRIP handshake. Use the following steps to feed one of these sources into the caster as a mountpoint.
 
-Steps 2-4 below (registering the mountpoint and reloading) can be done in one call with [`POST /adm/api/v1/sources`](#post-admapiv1sources) instead, or from the Sources page in the admin UI (`/adm/ui/`) -- read on if you want to understand what that call actually does, or need to do it by hand.
+Note: You can do steps 2 through 4 (register the mountpoint and reload) in one call to [`POST /adm/api/v1/sources`](#post-admapiv1sources), or from the Sources page in the admin UI (`/adm/ui/`). Continue reading to learn what that call does, or to do the steps by hand.
 
-1. Pick a mountpoint name (e.g. `MOUNT1`) and generate a password:
+1. Pick a mountpoint name, for example `MOUNT1`. Generate a password:
    ```sh
    openssl rand -hex 12
    ```
 
-2. Register it in your source authentication file -- the file pointed to by `source_auth_file:` in `caster.yaml` (`sample-config/source.auth` by default). One entry per line, colon-separated:
+2. Register the mountpoint in the source authentication file. This is the file set by `source_auth_file` in `caster.yaml` (`sample-config/source.auth` by default). Use one entry per line, in this colon-separated format:
    ```
    MOUNTPOINT:username:password
    ```
@@ -240,52 +204,52 @@ Steps 2-4 below (registering the mountpoint and reloading) can be done in one ca
    ```
    MOUNT1:MOUNT1:<generated password>
    ```
-   The username field must be present but is not actually checked for a raw TCP/NTRIP1 source push -- only the mountpoint and password are validated. (You can also add a wildcard entry `*::sharedpassword` to accept a push on *any* mountpoint not otherwise listed, instead of registering each one individually.)
+   The username field must be present. For a raw TCP or NTRIP1 source push, the caster does not check the username. The caster validates only the mountpoint and the password. Note: You can also add a wildcard entry, `*::sharedpassword`, to accept a push on any mountpoint that is not otherwise listed. This lets you skip registering each mountpoint individually.
 
-3. Advertise it in your sourcetable file -- the file pointed to by `sourcetable_file:` in `caster.yaml` (`sample-config/sourcetable.dat` by default) -- with a `STR` line. This is the standard NTRIP1 source-table record, 19 semicolon-separated fields:
+3. Advertise the mountpoint in the sourcetable file with a `STR` line. This is the file set by `sourcetable_file` in `caster.yaml` (`sample-config/sourcetable.dat` by default). The `STR` line is the standard NTRIP1 source-table record. It has 19 semicolon-separated fields:
 
    | # | Field | Meaning |
    |---|---|---|
    | 1 | `STR` | literal record type |
    | 2 | mountpoint | must match what you registered in step 2 |
    | 3 | identifier | free-text station name |
-   | 4 | format | e.g. `RTCM3` |
-   | 5 | format-details | comma-separated RTCM message types, e.g. `1004,1006,1008,1012,1013,1033` |
+   | 4 | format | for example `RTCM3` |
+   | 5 | format-details | comma-separated RTCM message types, for example `1004,1006,1008,1012,1013,1033` |
    | 6 | carrier | `0` = no carrier phase, `1` = L1, `2` = L1+L2 |
-   | 7 | nav-system | e.g. `GPS+GLO`, `GPS+GLO+GAL+BDS` |
+   | 7 | nav-system | for example `GPS+GLO`, `GPS+GLO+GAL+BDS` |
    | 8 | network | free-text network name, or `NONE` |
    | 9 | country | ISO country code, or `NONE` |
    | 10 | latitude | decimal degrees, positive north |
    | 11 | longitude | decimal degrees, positive east (negative for west) |
-   | 12 | **virtual flag** | Chilopod-specific: `0` for a real source, `1` for a "NEAR"/virtual base -- **must be `0` here**, or the caster will refuse the source push with a 404 |
+   | 12 | **virtual flag** | Chilopod-specific. `0` = real source, `1` = "NEAR" virtual base. This field **must be `0`** here. If it is not `0`, the caster refuses the source push with a 404 error. |
    | 13 | solution | `0` = single base, `1` = network RTK |
-   | 14 | generator | free-text, e.g. hardware/vendor name |
+   | 14 | generator | free-text, for example hardware or vendor name |
    | 15 | compr-encryp | compression/encryption, usually `none` |
    | 16 | authentication | `N`, `B` (basic), or `D` (digest) |
    | 17 | fee | `N` or `Y` |
    | 18 | bitrate | approximate stream bitrate in bits/sec, or `0` |
    | 19 | misc | free-text, often left empty |
 
-   You likely won't know the exact RTCM message types or position yet -- a placeholder is fine, since a local (non-virtual) mountpoint only appears in the public sourcetable once a source actually connects and starts streaming:
+   At this point, you do not yet know the exact RTCM message types or position. A placeholder value is fine. A local, non-virtual mountpoint appears in the public sourcetable only after a source connects and starts streaming:
    ```
    STR;MOUNT1;MOUNT1;RTCM3;1004,1006,1008,1012,1013,1033;2;GPS+GLO;NONE;NONE;0.000;0.000;0;0;bridge;none;N;N;0;
    ```
 
-4. Reload the running caster (no restart needed):
+4. Reload the running caster. A restart is not necessary:
    ```sh
    curl -X POST "http://localhost:2101/adm/api/v1/reload" --data "user=admin&password=admin"
    ```
 
-5. Bridge the raw TCP stream into the NTRIP push protocol with `scripts/rtcm_bridge.py`. It connects to the remote TCP socket, performs the `SOURCE <password> /<mountpoint>` handshake against the caster, and relays bytes through, reconnecting both legs with backoff on any drop:
+5. Use `scripts/rtcm_bridge.py` to bridge the raw TCP stream into the NTRIP push protocol. This script connects to the remote TCP socket. It performs the `SOURCE <password> /<mountpoint>` handshake with the caster. It then relays bytes between the two connections. If either connection drops, the script reconnects with a backoff delay:
    ```sh
    python3 scripts/rtcm_bridge.py \
      --remote-host <device-ip> --remote-port <device-port> \
      --caster-host 127.0.0.1 --caster-port 2101 \
      --mountpoint MOUNT1 --password <generated password>
    ```
-   Run it under whatever supervises long-lived processes on your system (systemd, a process manager, `nohup` + `&`, etc.) -- it runs forever, retrying on failure.
+   Run the script under a process supervisor, for example systemd, another process manager, or `nohup` with `&`. The script runs continuously and retries after a failure.
 
-   Some devices (e.g. Topcon receivers with a GRIL console) don't stream to a bare TCP connection -- they show a `login:`/`Password:` prompt first, and only start sending data once authenticated. Add `--remote-login-user` and `--remote-login-pass` for these; the bridge performs that login handshake once per (re)connection before relaying, and forwards any stream bytes that arrive bundled with the login confirmation instead of dropping them:
+   Some devices do not stream to a bare TCP connection. These devices show a `login:` and `Password:` prompt first. They send data only after authentication. For these devices, add `--remote-login-user` and `--remote-login-pass`. The bridge performs the login handshake once for each connection, before it relays data. The bridge also forwards any stream bytes that arrive with the login confirmation, instead of dropping them:
    ```sh
    python3 scripts/rtcm_bridge.py \
      --remote-host <device-ip> --remote-port <device-port> \
@@ -293,24 +257,24 @@ Steps 2-4 below (registering the mountpoint and reloading) can be done in one ca
      --mountpoint MOUNT1 --password <generated password> \
      --remote-login-user <device-username> --remote-login-pass <device-password>
    ```
-   Whether a device needs this, and what its accepted login messages will look like, is device-specific -- there's no way to tell without trying a bare connection first (see the "connection refused" troubleshooting note below for the alternative case, where nothing is listening at all).
+   Whether a device needs this option, and what login messages it expects, depends on the device. Try a bare connection first to find out. See the note below about a refused connection, for the case where nothing listens on the port.
 
-6. Verify it's live:
+6. Make sure that the source is live:
    ```sh
    curl "http://localhost:2101/adm/api/v1/net?user=admin&password=admin"       # look for type "source", mountpoint MOUNT1
    curl "http://localhost:2101/adm/api/v1/rtcm?user=admin&password=admin"      # decoded RTCM message types + position
    curl http://localhost:2101/                                                 # STR;MOUNT1;... now present
    ```
 
-7. Once you can see the real decoded message types and position from step 6, go back and fix the placeholder `STR` line in `sourcetable_file` to match, then reload again -- or just call [`POST /adm/api/v1/sources/detect`](#post-admapiv1sourcesdetect), which does exactly this for you:
+7. When you can see the real decoded message types and position from step 6, update the placeholder `STR` line in `sourcetable_file` to match. Then reload the caster again. You can also call [`POST /adm/api/v1/sources/detect`](#post-admapiv1sourcesdetect) instead, which does this for you:
    ```sh
    curl -X POST "http://localhost:2101/adm/api/v1/sources/detect" --data "user=admin&password=admin&mountpoint=MOUNT1"
    ```
-   There's no way to know the real message types before this point -- they're discovered from what the caster actually decodes once the source is streaming, not something you can read off the device in advance. This only works for genuine RTCM3 sources; Chilopod doesn't parse other formats (e.g. CMR), so there's nothing to detect for those.
+   You cannot know the real message types before this point. The caster discovers them by decoding the stream once the source is running. You cannot read these values from the device in advance. This detection works only for genuine RTCM3 sources. Chilopod does not parse other formats, for example CMR. For those formats, there is nothing to detect.
 
-If the connection is refused, check whether the source device's TCP output only allows a single simultaneous client (common on some receivers) -- it may already be in use, or need reconfiguring on the device itself to allow multiple connections.
+If the connection is refused, determine whether the source device's TCP output allows only one client at a time. This limit is common on some receivers. The port can already be in use. You can also reconfigure the device to allow multiple connections.
 
-If your source already speaks NTRIP natively, skip the bridge entirely -- just point it at the caster with the mountpoint/credentials from steps 1-2 directly.
+If your source already speaks NTRIP natively, do not use the bridge. Point the source directly at the caster, with the mountpoint and credentials from steps 1 and 2.
 
 Configuration Reference
 =======================
@@ -321,7 +285,7 @@ All configuration lives in `caster.yaml`. Sample files are in `sample-config/`.
 
 ### `listen`
 
-List of IP/port pairs to accept connections on. Supports IPv4 and IPv6.
+A list of IP and port pairs to accept connections on. This list supports IPv4 and IPv6.
 
 ```yaml
 listen:
@@ -336,9 +300,9 @@ listen:
 
 ### `source_auth_file`
 
-Path to the source authentication file (`source.auth`). Controls which username/password pairs are accepted for NTRIP source connections and admin access.
+The path to the source authentication file (`source.auth`). This file controls which username and password pairs the caster accepts for NTRIP source connections and admin access.
 
-Format -- one entry per line: `MOUNTPOINT:username:password`
+Format: one entry per line, as `MOUNTPOINT:username:password`
 
 ```
 # Allow a specific source to push to MOUNT1
@@ -351,17 +315,17 @@ admin:admin:adminpassword
 
 ### `sourcetable_file`
 
-Path to the local sourcetable in NTRIP STR format. See [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source) for the full field-by-field format.
+The path to the local sourcetable, in NTRIP STR format. For the full field-by-field format, see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source).
 
 ### `host_auth_file`
 
-Path to the host authentication file (`host.auth`). Credentials used when connecting outbound to other casters (proxy mode).
+The path to the host authentication file (`host.auth`). This file holds the credentials that the caster uses for outbound connections to other casters, in proxy mode.
 
 Format: `HOST:username:password`
 
 ### `admin_user`
 
-The key looked up in `source_auth_file` to authenticate `/adm` API requests. Defaults to `admin`.
+The key that the caster looks up in `source_auth_file` to authenticate `/adm` API requests. The default value is `admin`.
 
 ```yaml
 admin_user: admin
@@ -371,7 +335,7 @@ admin_user: admin
 
 ### `proxy`
 
-Optional upstream caster to proxy sources from. The remote sourcetable is fetched every `table_refresh_delay` seconds and merged with the local one. Sources are fetched on-demand when a client connects.
+An optional upstream caster to proxy sources from. The caster fetches the remote sourcetable every `table_refresh_delay` seconds and merges it with the local sourcetable. The caster fetches sources on demand, when a client connects.
 
 ```yaml
 proxy:
@@ -382,7 +346,7 @@ proxy:
 
 ### `syncer_auth`
 
-Shared bearer token for cluster node synchronization via `POST /adm/api/v1/sync`. Only needed when running multiple caster nodes. All nodes must share the same value.
+A shared bearer token for cluster node synchronization, used by [`POST /adm/api/v1/sync`](#post-admapiv1sync). You need this token only when you run multiple caster nodes. All nodes must share the same value.
 
 ```yaml
 syncer_auth: mysecrettoken
@@ -398,7 +362,7 @@ Paths for the main log and HTTP access log.
 
 Verbosity of the main log. One of: `EMERG`, `ALERT`, `CRIT`, `ERR`, `WARNING`, `NOTICE`, `INFO`, `DEBUG`, `EDEBUG`.
 
-> **Warning:** `DEBUG` and `EDEBUG` leak passwords to the log file.
+> **WARNING:** Do not use `DEBUG` or `EDEBUG` in production. These levels write passwords to the log file.
 
 ### `syslog`
 
@@ -432,21 +396,21 @@ graylog:
 
 ### `hysteresis_m`
 
-Distance hysteresis in meters for the NEAR base algorithm. Prevents rapid base switching when a client is near the boundary between two bases. Default: `500.0`.
+The distance hysteresis, in meters, for the NEAR base algorithm. This value prevents rapid base switching when a client is near the boundary between two bases. The default value is `500.0`.
 
 ### `backlog_socket`
 
-Size of the kernel send buffer (`SO_SNDBUF`) for client sockets, in bytes. Default: `114688` (112 KB).
+The size of the kernel send buffer (`SO_SNDBUF`) for client sockets, in bytes. The default value is `114688` (112 KB).
 
 ### `backlog_evbuffer`
 
-Maximum in-process send backlog per client connection, in bytes. Clients exceeding this are dropped. Default: `16384`.
+The maximum in-process send backlog for each client connection, in bytes. The caster drops clients that exceed this value. The default value is `16384`.
 
 ## Filtering & Access Control
 
 ### `rtcm_filter`
 
-Optional RTCM packet filter and converter. Currently limited to one filter with one conversion rule.
+An optional RTCM packet filter and converter. This version supports only one filter with one conversion rule.
 
 ```yaml
 rtcm_filter:
@@ -459,12 +423,12 @@ rtcm_filter:
 
 ### `blocklist_file`
 
-Path to the IP blocklist file. Optional.
+The path to the IP blocklist file. This setting is optional.
 
 Admin API
 =========
 
-All admin routes are under `/adm/`, served on whichever port(s) you configure in [`listen`](#listen) -- `2101` by default in the sample config.
+All admin routes are under `/adm/`. The caster serves them on the port or ports that you configure in [`listen`](#listen). The sample configuration uses port `2101` by default.
 
 ## Quick Reference
 
@@ -485,7 +449,7 @@ All admin routes are under `/adm/`, served on whichever port(s) you configure in
 
 ## Authentication
 
-**v1 API routes** require credentials passed as query string parameters or as a URL-encoded POST body:
+**v1 API routes** require credentials. Pass them as query string parameters, or in a URL-encoded POST body:
 
 ```
 GET /adm/api/v1/net?user=admin&password=admin
@@ -497,13 +461,13 @@ GET /adm/api/v1/net?user=admin&password=admin
 curl -u admin:admin http://localhost:2101/adm/net
 ```
 
-The username is looked up as a key in `source_auth_file`. The key used is the value of `admin_user` in `caster.yaml` (default: `admin`).
+The caster looks up the username as a key in `source_auth_file`. This key is the value of `admin_user` in `caster.yaml` (default: `admin`).
 
 ## v1 API Routes
 
 ### `GET /adm/api/v1/net`
 
-Returns a JSON object of all current NTRIP connections -- clients, sources, and admin sessions.
+Returns a JSON object with all current NTRIP connections: clients, sources, and admin sessions.
 
 ```sh
 curl "http://localhost:2101/adm/api/v1/net?user=admin&password=admin"
@@ -569,25 +533,25 @@ curl -X POST "http://localhost:2101/adm/api/v1/drop" \
 
 ### `POST /adm/api/v1/sources`
 
-Adds a mountpoint: appends an entry to `source_auth_file` and a `STR` line to `sourcetable_file`, then reloads. The form-based equivalent of manually editing those files and calling `reload` -- see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source) for what each field means. `mountpoint` and `source_password` are required; `lat`/`lon` are required and must be numeric. Every other field is optional and defaults the same way the manual `STR` line does (e.g. `format` defaults to `RTCM3`, `generator` to `unknown`). Fails with `{"result": -1, "error": "..."}` if the mountpoint already exists or a field contains `;`, `:`, or a newline.
+Adds a mountpoint. This route appends an entry to `source_auth_file` and a `STR` line to `sourcetable_file`, then reloads the caster. It is the form-based equivalent of editing those files by hand and calling `reload`. For the meaning of each field, see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source). The fields `mountpoint` and `source_password` are required. The fields `lat` and `lon` are required and must be numeric. Every other field is optional. Optional fields default the same way as the manual `STR` line, for example `format` defaults to `RTCM3` and `generator` defaults to `unknown`. If the mountpoint already exists, or a field contains `;`, `:`, or a newline, the route fails with `{"result": -1, "error": "..."}`.
 
 ```sh
 curl -X POST "http://localhost:2101/adm/api/v1/sources" \
   --data "user=admin&password=admin&mountpoint=MOUNT1&source_password=secret&lat=41.5&lon=-81.5"
 ```
 
-> **Watch out for `+` in field values** (e.g. `nav_system=GPS+GLO`) -- `curl --data` sends it as a literal `+`, and form-urlencoded bodies decode `+` as a space, so it'll arrive as `GPS GLO`. Use `--data-urlencode` instead for any field containing `+`:
+> **CAUTION:** For any field value that contains `+`, for example `nav_system=GPS+GLO`, use `--data-urlencode` instead of `--data`. `curl --data` sends `+` as a literal character. Form-urlencoded bodies decode `+` as a space. As a result, the value arrives as `GPS GLO` instead of `GPS+GLO`.
 > ```sh
 > curl -X POST "http://localhost:2101/adm/api/v1/sources" \
 >   --data-urlencode "user=admin" --data-urlencode "password=admin" \
 >   --data-urlencode "mountpoint=MOUNT1" --data-urlencode "source_password=secret" \
 >   --data-urlencode "nav_system=GPS+GLO" --data-urlencode "lat=41.5" --data-urlencode "lon=-81.5"
 > ```
-> This isn't an issue from the admin UI's Add Source form -- the browser encodes `+` correctly on its own.
+> This is not an issue with the Add Source form in the admin UI. The browser encodes `+` correctly.
 
 ### `POST /adm/api/v1/sources/remove`
 
-Removes a mountpoint: deletes its entries from `source_auth_file` and `sourcetable_file`, drops any connection currently pushing to it, then reloads. Fails with `{"result": -1, "error": "mountpoint not found"}` if there's no matching entry.
+Removes a mountpoint. This route deletes its entries from `source_auth_file` and `sourcetable_file`, drops any connection currently pushing to it, then reloads the caster. If no matching entry exists, the route fails with `{"result": -1, "error": "mountpoint not found"}`.
 
 ```sh
 curl -X POST "http://localhost:2101/adm/api/v1/sources/remove" \
@@ -596,12 +560,12 @@ curl -X POST "http://localhost:2101/adm/api/v1/sources/remove" \
 
 ### `POST /adm/api/v1/sources/detect`
 
-Looks up what the caster has actually decoded for a mountpoint (the same data `/adm/api/v1/rtcm` reports) and rewrites its `STR` line to match, then reloads -- the automated version of the "go back and fix the placeholder `STR` line" step in [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source). Updates two things independently:
+Looks up what the caster has decoded for a mountpoint. This is the same data that [`GET /adm/api/v1/rtcm`](#get-admapiv1rtcm) reports. The route rewrites the mountpoint's `STR` line to match, then reloads the caster. This is the automated version of the "update the placeholder `STR` line" step in [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source). The route updates two things independently:
 
-- **Format details** -- always, from the decoded RTCM3 message types.
-- **Position** -- only if the source has sent a 1005 or 1006 message (station coordinates); the response includes `lat`/`lon` when this happens, and omits them otherwise. There's no way to know a source's real surveyed position in advance either -- like message types, it's something the caster observes from the stream itself, not something you can enter more accurately by hand. `lat`/`lon` on [`POST /adm/api/v1/sources`](#post-admapiv1sources) only need to be approximate for this reason.
+- **Format details**: always, from the decoded RTCM3 message types.
+- **Position**: only if the source has sent a 1005 or 1006 message, with station coordinates. When this happens, the response includes `lat` and `lon`. Otherwise, the response omits them. You cannot know a source's real surveyed position in advance. Like the message types, the caster observes the position from the stream itself. For this reason, the `lat` and `lon` values on [`POST /adm/api/v1/sources`](#post-admapiv1sources) need to be approximate only.
 
-All other fields on the line are left untouched. Fails with `{"result": -1, "error": "no RTCM3 data observed yet for this mountpoint -- ..."}` if the mountpoint isn't connected yet, or doesn't speak RTCM3 at all (e.g. a CMR source) -- there's nothing to detect from a non-RTCM3 stream, since Chilopod only parses RTCM3 framing.
+The route leaves all other fields on the line unchanged. If the mountpoint is not connected yet, or does not speak RTCM3 at all, for example a CMR source, the route fails with `{"result": -1, "error": "no RTCM3 data observed yet for this mountpoint -- ..."}`. Chilopod parses only RTCM3 framing, so there is nothing to detect from a non-RTCM3 stream.
 
 ```sh
 curl -X POST "http://localhost:2101/adm/api/v1/sources/detect" \
@@ -611,7 +575,7 @@ curl -X POST "http://localhost:2101/adm/api/v1/sources/detect" \
 
 ### `POST /adm/api/v1/sync`
 
-Internal cluster synchronization endpoint. Uses `syncer_auth` token authentication (not the admin user/password). Content-Type must be `application/json`.
+An internal cluster synchronization endpoint. This route uses `syncer_auth` token authentication, not the admin username and password. The `Content-Type` header must be `application/json`.
 
 ## Legacy Routes
 
@@ -625,11 +589,11 @@ These routes use HTTP Basic Auth and return the same data as their v1 equivalent
 
 ## `mapi` Tool
 
-`mapi` is a Python 3 command-line tool (installed to `/usr/local/sbin/mapi`) that wraps the admin API.
+`mapi` is a Python 3 command-line tool that wraps the admin API. The install process places it at `/usr/local/sbin/mapi`.
 
 ### Configuration
 
-`mapi` reads credentials from `~/.mapi.conf` -- a JSON file with three keys:
+`mapi` reads credentials from `~/.mapi.conf`. This is a JSON file with three keys:
 
 ```json
 {
@@ -647,7 +611,7 @@ cat > ~/.mapi.conf <<'EOF'
 EOF
 ```
 
-Change `baseurl` to point at your caster's address and port. TLS is supported -- use `https://` if the caster is configured with a TLS listener.
+Change `baseurl` to point at the address and port of your caster. Chilopod supports TLS. If the caster has a TLS listener configured, use `https://`.
 
 ### Usage
 
