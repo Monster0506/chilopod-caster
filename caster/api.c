@@ -64,6 +64,19 @@ static json_object *api_ntrip_json(struct ntrip_state *st) {
 			json_object_object_add_ex(new_obj, "lat", json_object_new_double(st->last_pos.lat), JSON_C_CONSTANT_NEW);
 			json_object_object_add_ex(new_obj, "lon", json_object_new_double(st->last_pos.lon), JSON_C_CONSTANT_NEW);
 		}
+
+		if (st->pos_history_count > 1) {
+			json_object *trail = json_object_new_array_ext(st->pos_history_count);
+			int start = (st->pos_history_next - st->pos_history_count + POS_HISTORY_SIZE) % POS_HISTORY_SIZE;
+			for (int i = 0; i < st->pos_history_count; i++) {
+				pos_t *p = &st->pos_history[(start + i) % POS_HISTORY_SIZE];
+				json_object *pt = json_object_new_array_ext(2);
+				json_object_array_add(pt, json_object_new_double(p->lat));
+				json_object_array_add(pt, json_object_new_double(p->lon));
+				json_object_array_add(trail, pt);
+			}
+			json_object_object_add_ex(new_obj, "trail", trail, JSON_C_CONSTANT_NEW);
+		}
 	}
 
 	if (st->user_agent)

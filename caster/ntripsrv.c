@@ -534,6 +534,7 @@ void ntripsrv_readcb(struct bufferevent *bev, void *arg) {
 					if (parse_gga(value, &pos) >= 0) {
 						st->last_pos = pos;
 						st->last_pos_valid = 1;
+						ntrip_push_pos_history(st, pos);
 					}
 				} else if (!strcasecmp(key,
 						config->trusted_http_ip_header ?
@@ -803,6 +804,7 @@ void ntripsrv_readcb(struct bufferevent *bev, void *arg) {
 			if (parse_gga(line, &pos) >= 0) {
 				st->last_pos = pos;
 				st->last_pos_valid = 1;
+				ntrip_push_pos_history(st, pos);
 				joblist_append_ntrip_locked(st->caster->joblist, st, &ntripsrv_redo_virtual_pos_limited);
 			} else
 				ntrip_log(st, LOG_DEBUG, "BAD GGA \"%s\", %zd bytes", line, len);

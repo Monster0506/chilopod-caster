@@ -62,6 +62,8 @@ struct ntrip_state *ntrip_new(struct caster_state *caster, struct bufferevent *b
 	this->source_virtual = 0;
 	this->source_on_demand = 0;
 	this->last_pos_valid = 0;
+	this->pos_history_count = 0;
+	this->pos_history_next = 0;
 	memset(&this->last_recompute_date, 0, sizeof(this->last_recompute_date));
 	this->max_min_dist = 0;
 	this->user = NULL;
@@ -147,6 +149,17 @@ struct config *ntrip_refresh_config(struct ntrip_state *this) {
 	} else
 		config_decref(live);
 	return this->config;
+}
+
+/*
+ * Record a new client position in the ring buffer, for a rover trail on the
+ * map view. Oldest entry is at (pos_history_next - pos_history_count), wrapped.
+ */
+void ntrip_push_pos_history(struct ntrip_state *this, pos_t pos) {
+	this->pos_history[this->pos_history_next] = pos;
+	this->pos_history_next = (this->pos_history_next + 1) % POS_HISTORY_SIZE;
+	if (this->pos_history_count < POS_HISTORY_SIZE)
+		this->pos_history_count++;
 }
 
 /*

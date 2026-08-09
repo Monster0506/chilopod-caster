@@ -6,7 +6,7 @@ OPT	= -D_XOPEN_SOURCE -D_GNU_SOURCE
 #
 #OPT	+=	-DDEBUG_JEMALLOC
 
-CFLAGS	=	-g $(OPT) -I/usr/local/include -Wall
+CFLAGS	=	-g $(OPT) -I/usr/local/include -Wall -MMD -MP
 LDFLAGS	=	-L/usr/local/lib -levent_core -levent_extra -levent_pthreads -levent_openssl -lcyaml -lssl -lcrypto -ljson-c -lpthread -lm
 
 SRCS	=	adm.c api.c auth.c bitfield.c caster.c conf.c config.c endpoints.c fetcher_sourcetable.c file.c gelf.c graylog_sender.c hash.c http.c ip.c jobs.c json.c livesource.c log.c logbuf.c main.c nodes.c ntrip_common.c ntrip_task.c ntripcli.c ntripsrv.c packet.c request.c rtcm.c redistribute.c sourceline.c sourcetable.c syncer.c util.c
@@ -15,10 +15,9 @@ BINS	=	tests caster
 
 TESTOBJS	=	adm.o api.o auth.o bitfield.o caster.o conf.o config.o endpoints.o fetcher_sourcetable.o file.o gelf.o graylog_sender.o hash.o http.o ip.o jobs.o json.o livesource.o log.o logbuf.o nodes.o ntrip_common.o ntrip_task.o ntripcli.o ntripsrv.o packet.o rtcm.o redistribute.o request.o sourceline.o sourcetable.o syncer.o util.o tests.o
 
-all:	$(BINS)
+DEPS	=	$(OBJS:.o=.d) tests.d
 
-depend:
-	mkdep $(CFLAGS) $(SRCS)
+all:	$(BINS)
 
 install:	caster
 	install -m 0755 caster $(DEST_DIR)
@@ -26,10 +25,12 @@ install:	caster
 
 
 clean:
-	rm -f .depend $(OBJS) $(BINS) tests.o
+	rm -f $(OBJS) $(BINS) tests.o $(DEPS)
 
 tests:	$(TESTOBJS)
 	cc -o tests -lm $(TESTOBJS) $(LDFLAGS)
 
 caster:	$(OBJS)
 	cc -Wall -g -o caster $(OBJS) $(LDFLAGS)
+
+-include $(DEPS)

@@ -137,6 +137,20 @@
     }
 
     for (const r of roverPositions()) {
+      if (r.trail && r.trail.length > 1) {
+        const segments = r.trail.length - 1;
+        for (let i = 1; i < r.trail.length; i++) {
+          // Fade older segments out and the newest segment in, so the trail
+          // reads as a fading tail behind the rover's current position.
+          const opacity = 0.12 + (i / segments) * 0.55;
+          L.polyline([r.trail[i - 1], r.trail[i]], {
+            color: '#3b82f6',
+            weight: 3,
+            opacity,
+          }).addTo(roverLayer);
+        }
+      }
+
       const marker = L.marker([r.lat, r.lon], { icon: dotIcon('#3b82f6') });
       marker.bindPopup(
         `<b>Rover ${r.id}</b><br>` +

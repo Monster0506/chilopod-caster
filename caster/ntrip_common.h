@@ -230,6 +230,10 @@ struct ntrip_state {
 	// Position gathered from GGA lines sent by a NTRIP client
 	char last_pos_valid;			// last_pos and max_min_dist are valid
 	pos_t last_pos;				// last known position
+#define POS_HISTORY_SIZE 20
+	pos_t pos_history[POS_HISTORY_SIZE];	// ring buffer of recent positions, oldest to newest via pos_history_next
+	int pos_history_count;			// number of valid entries, caps at POS_HISTORY_SIZE
+	int pos_history_next;			// next write index in the ring
 	float last_dist;			// last known base distance (for hysteresis)
 	float max_min_dist;			// maximum distance to the closest base
 	float lookup_dist;			// dynamic lookup distance for the nearest base
@@ -251,6 +255,7 @@ struct ntrip_state {
 struct ntrip_state *ntrip_new(struct caster_state *caster, struct bufferevent *bev,
 	char *host, unsigned short port, const char *uri, char *mountpoint, struct config *new_config);
 struct config *ntrip_refresh_config(struct ntrip_state *this);
+void ntrip_push_pos_history(struct ntrip_state *this, pos_t pos);
 int ntrip_quota_incr(struct ntrip_state *this);
 void ntrip_quota_decr(struct ntrip_state *this);
 int ntrip_quota_change(struct ntrip_state *this, union sock *addr);
