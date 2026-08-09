@@ -15,7 +15,7 @@
   let baseLayer;
   let roverLayer;
   let coverageLayer;
-  let assignmentLayer;
+  let baselineLayer;
   let fitted = false;
   let roverMarkers = {};
   let baseMarkers = {};
@@ -134,7 +134,7 @@
     baseLayer.clearLayers();
     roverLayer.clearLayers();
     coverageLayer.clearLayers();
-    assignmentLayer.clearLayers();
+    baselineLayer.clearLayers();
     roverMarkers = {};
     baseMarkers = {};
 
@@ -184,7 +184,7 @@
             [assignedBase.lat, assignedBase.lon],
           ],
           { color: '#c2410c', weight: 3.5, opacity: 0.85 }
-        ).addTo(assignmentLayer);
+        ).addTo(baselineLayer);
       }
 
       if (r.trail && r.trail.length > 1) {
@@ -245,7 +245,7 @@
     // max_nearest_lookup_distance_m), so it's opt-in via the layer control
     // rather than shown automatically.
     coverageLayer = L.layerGroup();
-    assignmentLayer = L.layerGroup().addTo(map);
+    baselineLayer = L.layerGroup().addTo(map);
 
     L.control
       .layers(
@@ -254,7 +254,7 @@
           'Base stations': baseLayer,
           Rovers: roverLayer,
           'NEAR coverage': coverageLayer,
-          'Assignment lines': assignmentLayer,
+          Baselines: baselineLayer,
         }
       )
       .addTo(map);
@@ -267,7 +267,7 @@
           '<div><span class="map-legend-dot" style="background:#22c55e"></span>Live base</div>' +
           '<div><span class="map-legend-dot" style="background:#64748b"></span>Declared, offline</div>' +
           '<div><span class="map-legend-dot" style="background:#3b82f6"></span>Rover</div>' +
-          '<div><span class="map-legend-line" style="background:#c2410c"></span>Assignment</div>' +
+          '<div><span class="map-legend-line" style="background:#c2410c"></span>Baseline</div>' +
           '<div><span class="map-legend-line" style="background:#a78bfa"></span>NEAR coverage</div>';
         return div;
       },
