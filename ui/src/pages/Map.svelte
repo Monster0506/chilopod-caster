@@ -203,7 +203,7 @@
 
       const marker = L.marker([r.lat, r.lon], { icon: dotIcon('#3b82f6') });
       marker.bindPopup(
-        `<b>Rover ${r.id}</b><br>` +
+        `<b>Rover ${escapeHtml(r.auth_user ?? r.id)}</b><br>` +
           `IP: ${escapeHtml(r.ip ?? '—')}<br>` +
           `Mountpoint: ${escapeHtml(r.mountpoint ?? r.assigned_base ?? '—')}<br>` +
           `Connected: ${formatDuration(r.start)}<br>` +
@@ -350,7 +350,7 @@
   <table>
     <thead>
       <tr>
-        <th>ID</th>
+        <th>User</th>
         <th>IP</th>
         <th>Mountpoint</th>
         <th>Position</th>
@@ -368,7 +368,7 @@
           onclick={() => flyToRover(r)}
           title={r.lat != null ? 'Click to locate on map' : ''}
         >
-          <td class="mono">{r.id}</td>
+          <td class="mono">{r.auth_user ?? '—'}</td>
           <td class="mono">{r.ip}</td>
           <td class="mono">{r.mountpoint ?? r.assigned_base ?? '—'}</td>
           <td class="mono">{r.lat != null ? `${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}` : 'no GGA yet'}</td>
