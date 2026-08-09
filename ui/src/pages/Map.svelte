@@ -6,6 +6,7 @@
 
   let table = $state(null);
   let net = $state(null);
+  let settings = $state(null);
   let error = $state('');
   let autoRefresh = $state(true);
 
@@ -13,6 +14,8 @@
   let map;
   let baseLayer;
   let roverLayer;
+  let coverageLayer;
+  let assignmentLayer;
   let fitted = false;
   let roverMarkers = {};
   let baseMarkers = {};
@@ -98,10 +101,15 @@
 
   async function fetchAll() {
     try {
-      const [tables, connections] = await Promise.all([apiGet('sourcetables'), apiGet('net')]);
+      const [tables, connections, s] = await Promise.all([
+        apiGet('sourcetables'),
+        apiGet('net'),
+        apiGet('settings'),
+      ]);
       error = '';
       table = tables.find((t) => t.host === 'LOCAL') ?? { mountpoints: {} };
       net = connections;
+      settings = s;
     } catch (e) {
       error = e.message;
     }
@@ -125,12 +133,17 @@
     if (!map) return;
     baseLayer.clearLayers();
     roverLayer.clearLayers();
+    coverageLayer.clearLayers();
+    assignmentLayer.clearLayers();
     roverMarkers = {};
     baseMarkers = {};
 
     const bounds = [];
+    const bases = baseStations();
+    const basesByKey = Object.fromEntries(bases.map((b) => [b.key, b]));
+    const lookupRadiusM = settings?.max_nearest_lookup_distance_m;
 
-    for (const b of baseStations()) {
+    for (const b of bases) {
       const color = b.live ? '#22c55e' : '#64748b';
       const marker = L.marker([b.lat, b.lon], { icon: dotIcon(color) });
       marker.bindPopup(
@@ -144,9 +157,36 @@
       baseLayer.addLayer(marker);
       baseMarkers[b.key] = marker;
       bounds.push([b.lat, b.lon]);
+
+      // NEAR searches for a candidate base within this radius -- this is
+      // often huge (the config default is 1000km), so a filled circle would
+      // just wash the whole viewport one color whenever you're zoomed in
+      // past its edge. Border only, so it's informative when zoomed out far
+      // enough to see the boundary and invisible (correctly) otherwise.
+      if (b.live && lookupRadiusM) {
+        L.circle([b.lat, b.lon], {
+          radius: lookupRadiusM,
+          color: '#a78bfa',
+          weight: 1.5,
+          opacity: 0.45,
+          fill: false,
+        }).addTo(coverageLayer);
+      }
     }
 
     for (const r of roverPositions()) {
+      const assignedKey = r.assigned_base ?? r.mountpoint;
+      const assignedBase = assignedKey ? basesByKey[assignedKey] : null;
+      if (assignedBase) {
+        L.polyline(
+          [
+            [r.lat, r.lon],
+            [assignedBase.lat, assignedBase.lon],
+          ],
+          { color: '#c2410c', weight: 3.5, opacity: 0.85 }
+        ).addTo(assignmentLayer);
+      }
+
       if (r.trail && r.trail.length > 1) {
         const segments = r.trail.length - 1;
         for (let i = 1; i < r.trail.length; i++) {
@@ -201,11 +241,21 @@
 
     baseLayer = L.layerGroup().addTo(map);
     roverLayer = L.layerGroup().addTo(map);
+    // Off by default -- the circle radius is often huge (see
+    // max_nearest_lookup_distance_m), so it's opt-in via the layer control
+    // rather than shown automatically.
+    coverageLayer = L.layerGroup();
+    assignmentLayer = L.layerGroup().addTo(map);
 
     L.control
       .layers(
         { Satellite: satellite, Street: street },
-        { 'Base stations': baseLayer, Rovers: roverLayer }
+        {
+          'Base stations': baseLayer,
+          Rovers: roverLayer,
+          'NEAR coverage': coverageLayer,
+          'Assignment lines': assignmentLayer,
+        }
       )
       .addTo(map);
 
@@ -216,7 +266,9 @@
         div.innerHTML =
           '<div><span class="map-legend-dot" style="background:#22c55e"></span>Live base</div>' +
           '<div><span class="map-legend-dot" style="background:#64748b"></span>Declared, offline</div>' +
-          '<div><span class="map-legend-dot" style="background:#3b82f6"></span>Rover</div>';
+          '<div><span class="map-legend-dot" style="background:#3b82f6"></span>Rover</div>' +
+          '<div><span class="map-legend-line" style="background:#c2410c"></span>Assignment</div>' +
+          '<div><span class="map-legend-line" style="background:#a78bfa"></span>NEAR coverage</div>';
         return div;
       },
     });
@@ -514,6 +566,14 @@
     width: 9px;
     height: 9px;
     border-radius: 50%;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+  }
+
+  :global(.map-legend-line) {
+    display: inline-block;
+    width: 12px;
+    height: 2px;
     margin-right: 0.4rem;
     vertical-align: middle;
   }

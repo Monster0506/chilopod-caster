@@ -594,6 +594,7 @@ struct mime_content *api_settings_get_json(struct caster_state *caster, struct r
 
 	json_object_object_add_ex(j, "log_level", json_object_new_string(ll ? ll : "UNKNOWN"), JSON_C_CONSTANT_NEW);
 	json_object_object_add_ex(j, "hysteresis_m", json_object_new_double(config->hysteresis_m), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "max_nearest_lookup_distance_m", json_object_new_double(config->max_nearest_lookup_distance_m), JSON_C_CONSTANT_NEW);
 	json_object_object_add_ex(j, "backlog_socket", json_object_new_int64((long long)config->backlog_socket), JSON_C_CONSTANT_NEW);
 	json_object_object_add_ex(j, "backlog_evbuffer", json_object_new_int64((long long)config->backlog_evbuffer), JSON_C_CONSTANT_NEW);
 	json_object_object_add_ex(j, "admin_user", json_object_new_string(config->admin_user), JSON_C_CONSTANT_NEW);
