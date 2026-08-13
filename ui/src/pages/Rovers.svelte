@@ -18,6 +18,12 @@
     expandedGga = expandedGga === id ? null : id;
   }
 
+  function formatDist(m) {
+    if (m == null) return '-';
+    if (m >= 1000) return (m / 1000).toFixed(2) + ' km';
+    return m.toFixed(1) + ' m';
+  }
+
   function formatAgo(dateStr) {
     if (!dateStr) return '-';
     const sec = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -154,6 +160,9 @@
                     <h4>GGA fix</h4>
                     <div class="gga-grid">
                       <div><span class="gga-label">Position</span> <span class="mono">{conn.lat.toFixed(7)}, {conn.lon.toFixed(7)}</span></div>
+                      {#if conn.dist_to_base_m != null}
+                        <div><span class="gga-label">Dist to base</span> <span class="mono">{formatDist(conn.dist_to_base_m)}</span></div>
+                      {/if}
                       <div><span class="gga-label">Quality</span> <span class="mono">{GGA_QUALITY[gga.quality] ?? gga.quality}</span></div>
                       {#if gga.nsats != null}
                         <div><span class="gga-label">Sats</span> <span class="mono">{gga.nsats}</span></div>
