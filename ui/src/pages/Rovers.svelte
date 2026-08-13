@@ -1,11 +1,31 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
+  import { ChevronDown, ChevronRight } from '@lucide/svelte';
 
   let data = $state(null);
   let error = $state('');
   let autoRefresh = $state(true);
   let dropping = $state(new Set());
   let dropMsg = $state('');
+  let expandedGga = $state(null);
+
+  const GGA_QUALITY = {
+    0: 'Invalid', 1: 'GPS (Standalone)', 2: 'DGPS', 3: 'PPS',
+    4: 'RTK Fixed', 5: 'RTK Float', 6: 'Estimated', 7: 'Manual', 8: 'Simulation',
+  };
+
+  function toggleGga(id) {
+    expandedGga = expandedGga === id ? null : id;
+  }
+
+  function formatAgo(dateStr) {
+    if (!dateStr) return '-';
+    const sec = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    if (sec < 0) return 'just now';
+    if (sec < 60) return sec + 's ago';
+    if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+    return Math.floor(sec / 3600) + 'h ago';
+  }
 
   async function fetchAll() {
     try {
@@ -106,7 +126,16 @@
             <td class="mono">{conn.assigned_base ?? '-'}</td>
             <td class="mono">{conn.auth_user ?? '-'}</td>
             <td class="mono">{formatDuration(conn.start)}</td>
-            <td>
+            <td class="actions">
+              {#if conn.gga}
+                <button
+                  class="gga-btn"
+                  onclick={() => toggleGga(conn.id)}
+                  title={expandedGga === conn.id ? 'Hide GGA detail' : 'Show GGA detail'}
+                >
+                  {#if expandedGga === conn.id}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
+                </button>
+              {/if}
               <button
                 class="drop-btn"
                 onclick={() => drop(conn.id)}
@@ -116,6 +145,38 @@
               </button>
             </td>
           </tr>
+          {#if expandedGga === conn.id && conn.gga}
+            {@const gga = conn.gga}
+            <tr class="gga-detail-row">
+              <td colspan="8">
+                <div class="gga-detail">
+                  <div class="gga-detail-section">
+                    <h4>GGA fix</h4>
+                    <div class="gga-grid">
+                      <div><span class="gga-label">Position</span> <span class="mono">{conn.lat.toFixed(7)}, {conn.lon.toFixed(7)}</span></div>
+                      <div><span class="gga-label">Quality</span> <span class="mono">{GGA_QUALITY[gga.quality] ?? gga.quality}</span></div>
+                      {#if gga.nsats != null}
+                        <div><span class="gga-label">Sats</span> <span class="mono">{gga.nsats}</span></div>
+                      {/if}
+                      {#if gga.hdop != null}
+                        <div><span class="gga-label">HDOP</span> <span class="mono">{gga.hdop.toFixed(2)}</span></div>
+                      {/if}
+                      <div><span class="gga-label">Alt</span> <span class="mono">{gga.alt.toFixed(1)} m</span></div>
+                      <div><span class="gga-label">Geoid sep</span> <span class="mono">{gga.geoid_sep.toFixed(1)} m</span></div>
+                      {#if gga.diff_age != null}
+                        <div><span class="gga-label">Diff age</span> <span class="mono">{gga.diff_age.toFixed(1)} s</span></div>
+                      {/if}
+                      {#if gga.diff_station != null}
+                        <div><span class="gga-label">Diff station</span> <span class="mono">{gga.diff_station}</span></div>
+                      {/if}
+                      <div><span class="gga-label">Fix time</span> <span class="mono">{gga.time || '-'}</span></div>
+                      <div><span class="gga-label">Received</span> <span class="mono">{formatAgo(gga.date)}</span></div>
+                    </div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          {/if}
         {/each}
       </tbody>
     </table>
@@ -230,6 +291,63 @@
   .drop-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .gga-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem;
+    background: transparent;
+    border: 1px solid #1e3a5f;
+    border-radius: 4px;
+    color: #93c5fd;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 120ms;
+  }
+
+  .gga-btn:hover:not(:disabled) {
+    background: #1e3a5f33;
+  }
+
+  .gga-detail-row td {
+    background: #14161f;
+    padding: 1rem 1.25rem;
+  }
+
+  .gga-detail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+  }
+
+  .gga-detail-section h4 {
+    margin: 0 0 0.6rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .gga-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.5rem 1.5rem;
+    font-size: 0.82rem;
+  }
+
+  .gga-label {
+    display: inline-block;
+    width: 90px;
+    color: #64748b;
   }
 
   .empty {
