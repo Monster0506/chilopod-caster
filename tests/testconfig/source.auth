@@ -2,7 +2,6 @@ C77:test1:testpw!
 TEST1:test1:testpw!
 admin:admin:admin
 DEN:DEN:demopw!
-LON:LON:demopw!
 TOK:TOK:demopw!
 SYD:SYD:demopw!
 NYA:NYA:demopw!
@@ -27,3 +26,4 @@ WOO:WOO:demopw!
 MAS:MAS:demopw!
 ALL:ALL:demopw!
 SAL:SAL:demopw!
+LON:LON:demopw!
