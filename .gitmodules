@@ -1,0 +1,3 @@
+[submodule "rtcm-go"]
+	path = rtcm-go
+	url = https://github.com/Monster0506/rtcm-go

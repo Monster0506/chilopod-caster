@@ -75,13 +75,18 @@ Building
 cd caster; make clean all
 ```
 
-This produces two binaries inside `caster/`: `caster` (the daemon itself) and `tests`
+This produces two binaries inside `caster/`: `caster` (the daemon itself) and `tests` (the unit test suite -- run `./tests` to verify the build before installing).
 
-Chilopod's own RTCM3 decoding covers station position (1005/1006) and which message types have been seen, nothing more. To also decode satellite counts, per-constellation counts, and antenna/receiver info, build the sidecar from [rtcm-go](https://github.com/Monster0506/rtcm-go), a Go library with a companion binary at `cmd/sidecar`:
+Chilopod's own RTCM3 decoding covers station position (1005/1006) and which message types have been seen, nothing more. To also decode satellite counts, per-constellation counts, and antenna/receiver info, build the sidecar from [rtcm-go](https://github.com/Monster0506/rtcm-go), bundled in this repository as a submodule at `rtcm-go/`, with a companion binary at `cmd/sidecar`. If you cloned without `--recurse-submodules`, fetch it first:
 
 ```sh
 cd ..
-git clone https://github.com/Monster0506/rtcm-go
+git submodule update --init --recursive
+```
+
+Then build it:
+
+```sh
 cd rtcm-go
 go build -o sidecar ./cmd/sidecar
 cd ..
