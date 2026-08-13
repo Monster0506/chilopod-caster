@@ -10,6 +10,7 @@
 #include "nodes.h"
 #include "ntrip_common.h"
 #include "rtcm.h"
+#include "sidecar.h"
 #include "sourcetable.h"
 
 /*
@@ -137,21 +138,53 @@ struct mime_content *api_ntrip_list_json(struct caster_state *caster, struct req
  */
 struct mime_content *api_rtcm_json(struct caster_state *caster, struct request *req) {
 	char *s;
-	json_object *new_list;
+	json_object *new_list = json_object_new_object();
+	json_object *sidecar_doc = sidecar_stats_json(caster->config_dir, req->st->config);
+	json_object *sidecar_stats = NULL;
+	json_object *type_names = NULL;
+	if (sidecar_doc) {
+		json_object_object_get_ex(sidecar_doc, "mountpoints", &sidecar_stats);
+		json_object_object_get_ex(sidecar_doc, "type_names", &type_names);
+	}
 
-	if (!caster->rtcm_cache) {
-		new_list = json_object_new_null();
-	} else {
-		new_list = json_object_new_object();
+	if (caster->rtcm_cache) {
 		struct hash_iterator hi;
 		struct element *e;
 		P_RWLOCK_RDLOCK(&caster->rtcm_lock);
 		HASH_FOREACH(e, caster->rtcm_cache, hi) {
 			json_object *j = rtcm_info_json((struct rtcm_info *)e->value);
+			json_object *sc;
+			if (sidecar_stats && json_object_object_get_ex(sidecar_stats, e->key, &sc)) {
+				json_object_object_add_ex(j, "sidecar", json_object_get(sc), JSON_C_CONSTANT_NEW);
+			}
 			json_object_object_add(new_list, e->key, j);
 		}
 		P_RWLOCK_UNLOCK(&caster->rtcm_lock);
 	}
+
+	if (sidecar_stats) {
+		json_object_object_foreach(sidecar_stats, key, val) {
+			if (!json_object_object_get_ex(new_list, key, NULL)) {
+				json_object *j = json_object_new_object();
+				json_object_object_add_ex(j, "sidecar", json_object_get(val), JSON_C_CONSTANT_NEW);
+				json_object_object_add(new_list, key, j);
+			}
+		}
+	}
+
+	if (type_names) {
+		json_object_object_add_ex(new_list, "_type_names", json_object_get(type_names), JSON_C_CONSTANT_NEW);
+	}
+
+	if (sidecar_doc) {
+		json_object_put(sidecar_doc);
+	}
+
+	if (json_object_object_length(new_list) == 0) {
+		json_object_put(new_list);
+		new_list = json_object_new_null();
+	}
+
 	s = mystrdup(json_object_to_json_string(new_list));
 	struct mime_content *m = mime_new(s, -1, "application/json", 1);
 	json_object_put(new_list);
