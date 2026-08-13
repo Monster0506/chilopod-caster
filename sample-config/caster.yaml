@@ -152,4 +152,4 @@ ui_dir:	/usr/local/etc/chilopod/ui
 # (github.com/Monster0506/rtcm-go, cmd/sidecar). When set, satellite/
 # constellation counts and antenna info decoded by the sidecar are shown in the UI
 # into the /adm/api/v1/rtcm response and shown in the admin UI.
-# sidecar_stats_file:	mountpoints.json
+sidecar_stats_file:	/usr/local/etc/chilopod/mountpoints.json

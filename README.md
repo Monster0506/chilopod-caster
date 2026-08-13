@@ -118,6 +118,14 @@ Installation
 
 These steps configure Chilopod as a dedicated system service. Run the steps as the root user.
 
+`install.sh`, in the root of this repository, automates steps 1 through 4 below, plus copying the pre-built UI (see [Building the UI](#building-the-ui)):
+
+```sh
+sudo ./install.sh
+```
+
+To do the same steps by hand, or to see what the script does:
+
 1. Create a `caster` user:
    ```sh
    useradd --system --no-create-home --shell /usr/sbin/nologin caster
