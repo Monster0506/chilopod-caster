@@ -18,12 +18,12 @@
   let removeMsg = $state('');
   let detecting = $state(new Set());
   let detectMsg = $state('');
-
-  let editingAuth = $state(null);
-  let authForm = $state({ auth_user: '', auth_password: '' });
-  let savingAuth = $state(false);
   let revealed = $state(new Set());
-  let authMsg = $state('');
+
+  let editingMountpoint = $state(null);
+  let editForm = $state({ group: '', identifier: '', auth_user: '', auth_password: '' });
+  let savingEdit = $state(false);
+  let editMsg = $state('');
 
   const blankForm = {
     mountpoint: '',
@@ -209,36 +209,52 @@
     revealed = next;
   }
 
-  function startAuthEdit(mountpoint) {
-    const existing = authFor(mountpoint);
-    editingAuth = mountpoint;
-    authForm = { auth_user: existing?.user ?? '', auth_password: existing?.password ?? '' };
-    authMsg = '';
+  function startEdit(mountpoint, mnt) {
+    const existingAuth = authFor(mountpoint);
+    editingMountpoint = mountpoint;
+    editForm = {
+      group: strField(mnt.str, 7),
+      identifier: strField(mnt.str, 2),
+      auth_user: existingAuth?.user ?? '',
+      auth_password: existingAuth?.password ?? '',
+    };
+    editMsg = '';
   }
 
-  function cancelAuthEdit() {
-    editingAuth = null;
+  function cancelEdit() {
+    editingMountpoint = null;
   }
 
-  async function saveAuth(mountpoint) {
-    if (!authForm.auth_user || !authForm.auth_password) {
-      authMsg = 'User and password are required.';
-      return;
-    }
-    savingAuth = true;
-    authMsg = '';
+  async function saveEdit(mountpoint, mnt) {
+    savingEdit = true;
+    editMsg = '';
     try {
-      const res = await apiPost('auth', { mountpoint, ...authForm });
-      if (res.error) {
-        authMsg = res.error;
-      } else {
-        editingAuth = null;
-        await fetchAll();
+      const res = await apiPost('sources/edit', {
+        mountpoint,
+        group: editForm.group,
+        identifier: editForm.identifier,
+      });
+      if (res.result !== 0) {
+        editMsg = res.error ?? 'Failed to update mountpoint.';
+        return;
       }
+      if (!mnt.virtual && editForm.auth_user && editForm.auth_password) {
+        const authRes = await apiPost('auth', {
+          mountpoint,
+          auth_user: editForm.auth_user,
+          auth_password: editForm.auth_password,
+        });
+        if (authRes.error) {
+          editMsg = authRes.error;
+          return;
+        }
+      }
+      editingMountpoint = null;
+      await fetchAll();
     } catch (e) {
-      authMsg = `Failed: ${e.message}`;
+      editMsg = `Failed: ${e.message}`;
     } finally {
-      savingAuth = false;
+      savingEdit = false;
     }
   }
 
@@ -273,7 +289,7 @@
       <label>Format details <input bind:value={form.format_details} placeholder="1004,1006,1012,1033" /></label>
       <label>Carrier <input bind:value={form.carrier} /></label>
       <label>Nav system <input bind:value={form.nav_system} /></label>
-      <label>Network <input bind:value={form.network} /></label>
+      <label>Group <input bind:value={form.network} /></label>
       <label>Country <input bind:value={form.country} /></label>
       <label>Latitude <input bind:value={form.lat} placeholder="41.5 (approximate is fine)" /></label>
       <label>Longitude <input bind:value={form.lon} placeholder="-81.5 (approximate is fine)" /></label>
@@ -306,6 +322,7 @@
       <thead>
         <tr>
           <th>Mountpoint</th>
+          <th>Group</th>
           <th>Identifier</th>
           <th>Format</th>
           <th>Nav system</th>
@@ -318,14 +335,27 @@
       </thead>
       <tbody>
         {#if entries.length === 0}
-          <tr><td colspan="9" class="empty">No mountpoints configured.</td></tr>
+          <tr><td colspan="10" class="empty">No mountpoints configured.</td></tr>
         {/if}
         {#each entries as [key, mnt] (key)}
           {@const live = liveInfo(key)}
           {@const authEntry = authFor(key)}
           <tr>
             <td class="mono">{key}</td>
-            <td>{strField(mnt.str, 2)}</td>
+            <td>
+              {#if editingMountpoint === key}
+                <input class="edit-input" bind:value={editForm.group} placeholder="NONE" />
+              {:else}
+                {strField(mnt.str, 7)}
+              {/if}
+            </td>
+            <td>
+              {#if editingMountpoint === key}
+                <input class="edit-input" bind:value={editForm.identifier} />
+              {:else}
+                {strField(mnt.str, 2)}
+              {/if}
+            </td>
             <td class="mono">{strField(mnt.str, 3)}</td>
             <td class="mono">{navSystemDisplay(key, mnt)}</td>
             <td class="mono">{mnt.lat.toFixed(4)}, {mnt.lon.toFixed(4)}</td>
@@ -342,12 +372,11 @@
             <td>
               {#if mnt.virtual}
                 <span class="auth-na">n/a</span>
-              {:else if editingAuth === key}
+              {:else if editingMountpoint === key}
                 <div class="auth-edit">
-                  <input class="edit-input" bind:value={authForm.auth_user} placeholder="user" />
-                  <input class="edit-input" bind:value={authForm.auth_password} placeholder="password" />
+                  <input class="edit-input" bind:value={editForm.auth_user} placeholder="user" />
+                  <input class="edit-input" bind:value={editForm.auth_password} placeholder="password" />
                 </div>
-                {#if authMsg}<div class="auth-msg">{authMsg}</div>{/if}
               {:else if authEntry}
                 <span class="mono">
                   {authEntry.user} /
@@ -365,11 +394,12 @@
               {/if}
             </td>
             <td class="actions">
-              {#if !mnt.virtual && editingAuth === key}
-                <button class="save-btn" onclick={() => saveAuth(key)} disabled={savingAuth}>
-                  {savingAuth ? '…' : 'Save'}
+              {#if editingMountpoint === key}
+                <button class="save-btn" onclick={() => saveEdit(key, mnt)} disabled={savingEdit}>
+                  {savingEdit ? '…' : 'Save'}
                 </button>
-                <button class="cancel-btn" onclick={cancelAuthEdit} disabled={savingAuth}>Cancel</button>
+                <button class="cancel-btn" onclick={cancelEdit} disabled={savingEdit}>Cancel</button>
+                {#if editMsg}<div class="auth-msg">{editMsg}</div>{/if}
               {:else}
                 {#if !mnt.virtual}
                   <button
@@ -379,10 +409,10 @@
                   >
                     {#if expandedRtcm === key}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
                   </button>
-                  <button class="auth-btn" onclick={() => startAuthEdit(key)} title={authEntry ? 'Edit' : 'Add'}>
-                    {#if authEntry}<Pencil size={14} />{:else}<Plus size={14} />{/if}
-                  </button>
                 {/if}
+                <button class="auth-btn" onclick={() => startEdit(key, mnt)} title="Edit mountpoint">
+                  <Pencil size={14} />
+                </button>
                 {#if live && strField(mnt.str, 3) === 'RTCM3'}
                   <button
                     class="detect-btn"
@@ -408,7 +438,7 @@
             {@const info = rtcmFor(key)}
             {@const types = rtcmTypes(info)}
             <tr class="rtcm-detail-row">
-              <td colspan="9">
+              <td colspan="10">
                 <div class="rtcm-detail">
                   <div class="rtcm-detail-section">
                     <h4>Message types seen</h4>

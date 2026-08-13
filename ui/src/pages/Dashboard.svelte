@@ -1,48 +1,173 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
 
-  let data = $state(null);
+  const GGA_QUALITY = {
+    0: 'Invalid', 1: 'GPS (Standalone)', 2: 'DGPS', 3: 'PPS',
+    4: 'RTK Fixed', 5: 'RTK Float', 6: 'Estimated', 7: 'Manual', 8: 'Simulation',
+  };
+
+  const HISTORY_MAX = 20;
+  const POLL_MS = 5000;
+  const CONN_WINDOW_S = 10;
+  const CONN_WINDOW_SAMPLES = Math.round(CONN_WINDOW_S / (POLL_MS / 1000)) + 1;
+
+  let net = $state(null);
+  let livesources = $state(null);
+  let mem = $state(null);
+  let sourcetable = $state(null);
+  let rtcm = $state(null);
+  let logEntries = $state([]);
   let error = $state('');
   let reloading = $state(false);
   let reloadMsg = $state('');
 
+  let connHistory = $state([]);
+  let churnHistory = $state([]);
+  let previousConnIds = null;
+
+  function strField(str, i) {
+    return str.split(';')[i] ?? '';
+  }
+
+  function liveInfo(mountpoint) {
+    if (!net) return null;
+    return Object.values(net).find((c) => (c.type === 'source' || c.type === 'source_fetcher') && c.mountpoint === mountpoint) ?? null;
+  }
+
+  function formatAgo(dateStr) {
+    if (!dateStr) return '-';
+    const sec = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    if (sec < 0) return 'just now';
+    if (sec < 60) return sec + 's ago';
+    if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+    return Math.floor(sec / 3600) + 'h ago';
+  }
+
+  function formatDist(m) {
+    if (m == null) return '-';
+    if (m >= 1000) return (m / 1000).toFixed(2) + ' km';
+    return m.toFixed(0) + ' m';
+  }
+
+  function formatLatency(ms) {
+    if (ms == null) return '-';
+    if (ms >= 1000) return (ms / 1000).toFixed(1) + 's';
+    return Math.round(ms) + 'ms';
+  }
+
+  function pushHistory(arr, value, max = HISTORY_MAX) {
+    const next = [...arr, value];
+    return next.length > max ? next.slice(-max) : next;
+  }
+
+  function trend(history) {
+    if (history.length < 2) return null;
+    const first = history[0];
+    const last = history[history.length - 1];
+    const elapsedS = (history.length - 1) * (POLL_MS / 1000);
+    return { delta: last - first, elapsedS };
+  }
+
+  function formatElapsed(s) {
+    if (s < 60) return `${Math.round(s)}s`;
+    return `${Math.round(s / 60)}m`;
+  }
+
   async function fetchAll() {
     try {
-      const [net, livesources, mem, nodes] = await Promise.all([
-        apiGet('net'),
-        apiGet('livesources'),
-        apiGet('mem'),
-        apiGet('nodes'),
+      const [netRes, livesourcesRes, memRes, tablesRes, rtcmRes, logRes] = await Promise.all([
+        apiGet('net'), apiGet('livesources'), apiGet('mem'),
+        apiGet('sourcetables'), apiGet('rtcm'), apiGet('log'),
       ]);
       error = '';
-      data = { net, livesources, mem, nodes };
+      net = netRes;
+      livesources = livesourcesRes;
+      mem = memRes;
+      sourcetable = tablesRes.find((t) => t.host === 'LOCAL') ?? { mountpoints: {} };
+      rtcm = rtcmRes;
+      logEntries = logRes.filter((e) => e.level <= 6).slice(-6).reverse();
+
+      const cc = connCounts(net);
+      connHistory = pushHistory(connHistory, cc.total, CONN_WINDOW_SAMPLES);
+
+      const currentIds = new Set(Object.keys(net));
+      if (previousConnIds) {
+        const connects = [...currentIds].filter((id) => !previousConnIds.has(id)).length;
+        const disconnects = [...previousConnIds].filter((id) => !currentIds.has(id)).length;
+        churnHistory = pushHistory(churnHistory, connects + disconnects);
+      }
+      previousConnIds = currentIds;
     } catch (e) {
       error = e.message;
     }
   }
 
-  // Derived counts
-  function connCounts(net) {
-    const conns = Object.values(net);
+  function connCounts(n) {
+    const conns = Object.values(n);
     return {
       total: conns.length,
-      clients:  conns.filter(c => c.type === 'client').length,
-      sources:  conns.filter(c => c.type === 'source' || c.type === 'source_fetcher').length,
+      clients: conns.filter((c) => c.type === 'client').length,
+      sources: conns.filter((c) => c.type === 'source' || c.type === 'source_fetcher').length,
     };
   }
 
-  function liveSourceCount(ls) {
-    return Object.keys(ls.LOCAL ?? {}).length;
+  function memAllocated(m) {
+    const bytes = m?.jemalloc?.stats?.allocated;
+    if (bytes == null) return null;
+    return bytes / 1024 / 1024;
   }
 
-  function memAllocated(mem) {
-    const bytes = mem?.jemalloc?.stats?.allocated;
-    if (bytes == null) return '-';
-    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  function memUnavailable(m) {
+    return !!m?.err;
   }
 
-  function nodeCount(nodes) {
-    return Object.keys(nodes).length;
+  function rovers(n) {
+    return Object.values(n).filter((c) => c.type === 'client');
+  }
+
+  function fixBreakdown(roverList) {
+    const counts = { standalone: 0, dgps: 0, float: 0, fixed: 0, other: 0 };
+    for (const r of roverList) {
+      const q = r.gga?.quality;
+      if (q === 1) counts.standalone++;
+      else if (q === 2 || q === 3) counts.dgps++;
+      else if (q === 5) counts.float++;
+      else if (q === 4) counts.fixed++;
+      else if (q != null) counts.other++;
+    }
+    return counts;
+  }
+
+  function localMountpoints() {
+    if (!sourcetable) return [];
+    return Object.entries(sourcetable.mountpoints).filter(([, mnt]) => !mnt.virtual);
+  }
+
+  function referenceStations() {
+    return localMountpoints().map(([key, mnt]) => {
+      const info = rtcm?.[key];
+      const live = !!liveInfo(key);
+      return {
+        key,
+        group: strField(mnt.str, 7),
+        live,
+        svs: info?.sidecar?.satellite_count ?? null,
+        latencyMs: info?.sidecar?.latency_ms ?? null,
+      };
+    });
+  }
+
+  function groupSummary() {
+    const map = new Map();
+    for (const [key, mnt] of localMountpoints()) {
+      const group = strField(mnt.str, 7) || 'NONE';
+      const live = !!liveInfo(key);
+      if (!map.has(group)) map.set(group, { live: 0, total: 0 });
+      const g = map.get(group);
+      g.total++;
+      if (live) g.live++;
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
   }
 
   async function reload() {
@@ -58,10 +183,19 @@
     }
   }
 
-  // Initial fetch + 5s interval
+  function sparkPath(history, w, h) {
+    if (history.length < 2) return null;
+    const max = Math.max(...history), min = Math.min(...history);
+    const range = max - min || 1;
+    const step = w / (history.length - 1);
+    const coords = history.map((v, i) => [i * step, h - ((v - min) / range) * (h - 4) - 2]);
+    const path = coords.map((c, i) => (i === 0 ? 'M' : 'L') + c[0].toFixed(1) + ',' + c[1].toFixed(1)).join(' ');
+    return { path, area: path + ` L${w},${h} L0,${h} Z` };
+  }
+
   $effect(() => {
     fetchAll();
-    const id = setInterval(fetchAll, 5000);
+    const id = setInterval(fetchAll, POLL_MS);
     return () => clearInterval(id);
   });
 </script>
@@ -79,33 +213,186 @@
 
   {#if error}
     <p class="error">{error}</p>
-  {:else if !data}
+  {:else if !net || !sourcetable}
     <p class="loading">Loading…</p>
   {:else}
-    {@const cc = connCounts(data.net)}
-    <div class="cards">
-      <div class="card">
-        <div class="card-value">{cc.total}</div>
-        <div class="card-label">Connections</div>
-        <div class="card-sub">{cc.clients} clients · {cc.sources} sources</div>
+    {@const cc = connCounts(net)}
+    {@const roverList = rovers(net)}
+    {@const fixCounts = fixBreakdown(roverList)}
+    {@const connTrend = trend(connHistory)}
+    {@const stations = referenceStations()}
+    {@const groups = groupSummary()}
+    {@const memMB = memAllocated(mem)}
+    {@const connSpark = sparkPath(connHistory, 64, 26)}
+    {@const localCount = localMountpoints().length}
+    {@const liveCount = stations.filter((s) => s.live).length}
+    {@const churnW = 1040}
+    {@const churnBarW = (churnW - 19 * 4) / 20}
+    {@const maxChurn = Math.max(1, ...churnHistory)}
+
+    <div class="bare-strip">
+      <span class="strip-label">Groups</span>
+      {#if groups.length === 0}
+        <span class="strip-empty">No local mountpoints configured.</span>
+      {:else}
+        {#each groups as [name, g] (name)}
+          <span class="chip">
+            <span class="dot" class:good={g.live === g.total} class:warn={g.live > 0 && g.live < g.total} class:off={g.live === 0}></span>
+            {name} {g.live}/{g.total}
+          </span>
+        {/each}
+      {/if}
+    </div>
+
+    <div class="board">
+      <div class="card s3">
+        <p class="card-title">Connections</p>
+        <div class="stat-row">
+          <div class="stat-value">{cc.total}</div>
+          {#if connSpark}
+            <svg width="64" height="26" viewBox="0 0 64 26">
+              <path d={connSpark.area} fill="#93c5fd" opacity="0.14" />
+              <path d={connSpark.path} fill="none" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          {/if}
+        </div>
+        <div class="stat-sub">{cc.clients} clients &middot; {cc.sources} sources</div>
+        {#if connTrend}
+          <div class="trend" class:up={connTrend.delta > 0} class:down={connTrend.delta < 0}>
+            {connTrend.delta > 0 ? '▲' : connTrend.delta < 0 ? '▼' : '–'} {Math.abs(connTrend.delta)}
+            <span class="dim">vs {formatElapsed(connTrend.elapsedS)} ago</span>
+          </div>
+        {/if}
       </div>
 
-      <div class="card">
-        <div class="card-value">{liveSourceCount(data.livesources)}</div>
-        <div class="card-label">Live Sources</div>
-        <div class="card-sub">local mountpoints active</div>
+      <div class="card s3">
+        <p class="card-title">Live Sources</p>
+        <div class="stat-row">
+          <div class="stat-value">{liveCount}<span class="stat-sub-inline">/{localCount}</span></div>
+        </div>
+        <div class="stat-sub">local mountpoints active</div>
       </div>
 
-      <div class="card">
-        <div class="card-value">{memAllocated(data.mem)}</div>
-        <div class="card-label">Memory</div>
-        <div class="card-sub">jemalloc allocated</div>
+      <div class="card s3">
+        <p class="card-title">Memory</p>
+        {#if memMB != null}
+          <div class="stat-row">
+            <div class="stat-value">{memMB.toFixed(1)}<span class="stat-sub-inline">MB</span></div>
+          </div>
+          <div class="stat-sub">jemalloc allocated</div>
+        {:else if memUnavailable(mem)}
+          <div class="stat-value" style="font-size:1rem;color:#64748b">Not available</div>
+          <div class="stat-sub">requires a -DDEBUG_JEMALLOC build</div>
+        {:else}
+          <div class="stat-value">-</div>
+        {/if}
       </div>
 
-      <div class="card">
-        <div class="card-value">{nodeCount(data.nodes)}</div>
-        <div class="card-label">Nodes</div>
-        <div class="card-sub">cluster peers</div>
+      <div class="card s3">
+        <p class="card-title">Rovers</p>
+        <div class="stat-row">
+          <div class="stat-value">{roverList.length}</div>
+        </div>
+        <div class="chip-row">
+          {#if fixCounts.fixed}<span class="chip"><span class="dot good"></span>{fixCounts.fixed} fixed</span>{/if}
+          {#if fixCounts.float}<span class="chip"><span class="dot warn"></span>{fixCounts.float} float</span>{/if}
+          {#if fixCounts.dgps}<span class="chip"><span class="dot" style="background:#93c5fd"></span>{fixCounts.dgps} dgps</span>{/if}
+          {#if fixCounts.standalone}<span class="chip"><span class="dot off"></span>{fixCounts.standalone} standalone</span>{/if}
+          {#if roverList.length === 0}<span class="stat-sub">no rovers connected</span>{/if}
+        </div>
+      </div>
+
+      <div class="card s7">
+        <p class="card-title">Reference Stations</p>
+        <div class="table-scroll">
+          <table class="mini">
+            <thead><tr><th></th><th>Station</th><th>Group</th><th>SVs</th><th>Latency</th></tr></thead>
+            <tbody>
+              {#if stations.length === 0}
+                <tr><td colspan="5" class="empty-cell">No local mountpoints configured.</td></tr>
+              {/if}
+              {#each stations as s (s.key)}
+                <tr>
+                  <td><span class="dot" class:good={s.live} class:off={!s.live}></span></td>
+                  <td class="mono">{s.key}</td>
+                  <td>{s.group || '—'}</td>
+                  <td class="mono">{s.svs ?? '—'}</td>
+                  <td class="mono">{formatLatency(s.latencyMs)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card s5">
+        <p class="card-title">Alarms</p>
+        <div class="empty-state">
+          <div class="glyph">&#9888;</div>
+          <div class="msg">Coming soon</div>
+          <div class="sub">Alarm system not implemented yet</div>
+        </div>
+      </div>
+
+      <div class="card s7">
+        <div class="card-title-row">
+          <p class="card-title">Active Rovers</p>
+          <div class="chip-row">
+            {#if fixCounts.fixed}<span class="chip"><span class="dot good"></span>{fixCounts.fixed} fixed</span>{/if}
+            {#if fixCounts.float}<span class="chip"><span class="dot warn"></span>{fixCounts.float} float</span>{/if}
+            {#if fixCounts.standalone}<span class="chip"><span class="dot off"></span>{fixCounts.standalone} standalone</span>{/if}
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="mini">
+            <thead><tr><th>User</th><th>Base</th><th>Dist</th><th>Fix</th></tr></thead>
+            <tbody>
+              {#if roverList.length === 0}
+                <tr><td colspan="4" class="empty-cell">No rovers connected.</td></tr>
+              {/if}
+              {#each roverList as r (r.id)}
+                <tr>
+                  <td class="mono">{r.auth_user ?? r.ip}</td>
+                  <td class="mono">{r.assigned_base ?? r.mountpoint ?? '—'}</td>
+                  <td class="mono">{formatDist(r.dist_to_base_m)}</td>
+                  <td>
+                    {#if r.gga}
+                      <span class="badge" class:good={r.gga.quality === 4} class:warn={r.gga.quality === 5} class:neutral={r.gga.quality !== 4 && r.gga.quality !== 5}>
+                        {GGA_QUALITY[r.gga.quality] ?? r.gga.quality}
+                      </span>
+                    {:else}
+                      <span class="badge neutral">no GGA</span>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card s5">
+        <p class="card-title">Activity</p>
+        {#if logEntries.length === 0}
+          <p class="stat-sub">No recent activity.</p>
+        {:else}
+          {#each logEntries as e (e.id)}
+            <div class="list-row"><span class="t">{formatAgo(e.timestamp)}</span><span>{e.message}</span></div>
+          {/each}
+        {/if}
+      </div>
+
+      <div class="bare-chart">
+        <svg width="100%" height="60" viewBox="0 0 {churnW} 60" preserveAspectRatio="none">
+          {#each churnHistory as v, i (i)}
+            {@const h = Math.max(2, (v / maxChurn) * 56)}
+            {@const x = i * (churnBarW + 4)}
+            <rect x={x.toFixed(1)} y={(60 - h).toFixed(1)} width={churnBarW.toFixed(1)} height={h.toFixed(1)} rx="2" fill={v > maxChurn * 0.6 ? '#fbbf24' : '#64748b'} />
+          {/each}
+        </svg>
+        <p class="chart-caption">
+          Connection Churn &middot; connects + disconnects per {POLL_MS / 1000}s poll, observed since this page opened
+        </p>
       </div>
     </div>
   {/if}
@@ -120,7 +407,7 @@
     display: flex;
     align-items: center;
     gap: 1.5rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
   }
 
   h2 {
@@ -160,36 +447,242 @@
     color: #64748b;
   }
 
-  .cards {
+  .bare-strip {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    padding-bottom: 1rem;
+    margin-bottom: 1.15rem;
+    border-bottom: 1px solid #1e2130;
+  }
+
+  .strip-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #475569;
+    margin-right: 0.3rem;
+  }
+
+  .strip-empty {
+    font-size: 0.78rem;
+    color: #475569;
+  }
+
+  .board {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(12, 1fr);
     gap: 1rem;
   }
 
   .card {
+    grid-column: span 12;
     background: #1a1d27;
     border: 1px solid #2a2d3a;
     border-radius: 8px;
-    padding: 1.5rem;
+    padding: 1.1rem 1.25rem;
+    min-width: 0;
   }
 
-  .card-value {
-    font-size: 2.2rem;
+  .s3 { grid-column: span 3; }
+  .s5 { grid-column: span 5; }
+  .s7 { grid-column: span 7; }
+
+  @media (max-width: 1000px) {
+    .s3, .s5, .s7 { grid-column: span 12; }
+  }
+
+  .card-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #475569;
+    margin: 0 0 0.85rem;
+  }
+
+  .card-title-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+  }
+  .card-title-row .card-title { margin: 0; }
+
+  .stat-value {
+    font-family: monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.9rem;
     font-weight: 700;
     color: #e2e8f0;
     line-height: 1;
-    margin-bottom: 0.4rem;
   }
 
-  .card-label {
-    font-size: 0.9rem;
-    color: #94a3b8;
-    margin-bottom: 0.3rem;
-  }
-
-  .card-sub {
-    font-size: 0.75rem;
+  .stat-sub-inline {
+    font-size: 1rem;
     color: #475569;
+  }
+
+  .stat-sub {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 0.35rem;
+  }
+
+  .stat-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .trend {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-family: monospace;
+    font-size: 0.72rem;
+    margin-top: 0.5rem;
+    color: #94a3b8;
+  }
+  .trend.up { color: #86efac; }
+  .trend.down { color: #fca5a5; }
+  .trend .dim { color: #475569; }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: inline-block;
+    background: #475569;
+  }
+  .dot.good { background: #22c55e; box-shadow: 0 0 0 2px #14301b; }
+  .dot.warn { background: #d97706; box-shadow: 0 0 0 2px #3a2a0f; }
+  .dot.off { background: #475569; }
+
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+  }
+
+  .chip {
+    font-size: 0.74rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 999px;
+    background: #14161f;
+    border: 1px solid #1e2130;
+    color: #94a3b8;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-family: monospace;
+    white-space: nowrap;
+    background: #22263a;
+    color: #94a3b8;
+  }
+  .badge.good { background: #14301b; color: #86efac; }
+  .badge.warn { background: #3a2a0f; color: #fbbf24; }
+  .badge.neutral { background: #22263a; color: #94a3b8; }
+
+  .mono {
+    font-family: monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .table-scroll {
+    max-height: 226px;
+    overflow-y: auto;
+    overflow-x: auto;
+  }
+  .table-scroll table.mini thead th {
+    position: sticky;
+    top: 0;
+    background: #1a1d27;
+    z-index: 1;
+  }
+
+  table.mini {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+  table.mini th {
+    text-align: left;
+    font-weight: 500;
+    color: #475569;
+    padding: 0 0.5rem 0.4rem 0;
+    border-bottom: 1px solid #1e2130;
+  }
+  table.mini td {
+    padding: 0.4rem 0.5rem 0.4rem 0;
+    border-bottom: 1px solid #1e2130;
+    color: #94a3b8;
+  }
+  table.mini tr:last-child td { border-bottom: none; }
+
+  .empty-cell {
+    color: #475569;
+    padding: 0.6rem 0;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 0.4rem;
+    padding: 1.6rem 1rem;
+    color: #475569;
+    min-height: 96px;
+  }
+  .empty-state .glyph { font-size: 1.3rem; opacity: 0.6; }
+  .empty-state .msg { font-size: 0.82rem; color: #64748b; }
+  .empty-state .sub { font-size: 0.72rem; }
+
+  .list-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.35rem 0;
+    font-size: 0.78rem;
+    color: #94a3b8;
+    border-bottom: 1px solid #1e2130;
+  }
+  .list-row:last-child { border-bottom: none; }
+  .list-row .t {
+    color: #475569;
+    font-family: monospace;
+    font-size: 0.68rem;
+    width: 3.8rem;
+    flex-shrink: 0;
+  }
+
+  .bare-chart {
+    grid-column: span 12;
+    padding-top: 0.25rem;
+  }
+  .chart-caption {
+    margin: 0.7rem 0 0;
+    text-align: center;
+    font-size: 0.75rem;
+    color: #64748b;
   }
 
   .error {
