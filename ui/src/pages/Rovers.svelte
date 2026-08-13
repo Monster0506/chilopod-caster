@@ -32,7 +32,7 @@
   }
 
   function formatDuration(start) {
-    if (!start) return '—';
+    if (!start) return '-';
     const sec = Math.floor((Date.now() - new Date(start).getTime()) / 1000);
     if (sec < 60) return sec + 's';
     if (sec < 3600) return Math.floor(sec / 60) + 'm ' + (sec % 60) + 's';
@@ -43,7 +43,7 @@
 
   function formatLatency(conn) {
     const rtt = conn.tcp_info?.rtt;
-    if (rtt == null) return '—';
+    if (rtt == null) return '-';
     return (rtt / 1000).toFixed(1) + ' ms';
   }
 
@@ -102,9 +102,9 @@
             <td class="mono">{conn.id}</td>
             <td class="mono">{conn.ip}</td>
             <td class="mono">{formatLatency(conn)}</td>
-            <td class="mono">{conn.mountpoint ?? '—'}</td>
-            <td class="mono">{conn.assigned_base ?? '—'}</td>
-            <td class="mono">{conn.auth_user ?? '—'}</td>
+            <td class="mono">{conn.mountpoint ?? '-'}</td>
+            <td class="mono">{conn.assigned_base ?? '-'}</td>
+            <td class="mono">{conn.auth_user ?? '-'}</td>
             <td class="mono">{formatDuration(conn.start)}</td>
             <td>
               <button

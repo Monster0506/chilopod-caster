@@ -128,7 +128,7 @@
         <div class="log-line lvl-row-{levelName(e.level)}">
           <span class="lg-time">{formatTime(e.timestamp)}</span>
           <span class="lg-level lvl-{levelName(e.level)}">{levelName(e.level)}</span>
-          <span class="lg-meta">{e.remote_ip ? `${e.remote_ip}:${e.remote_port}` : '—'} {e.connection_id ?? ''}</span>
+          <span class="lg-meta">{e.remote_ip ? `${e.remote_ip}:${e.remote_port}` : '-'} {e.connection_id ?? ''}</span>
           <span class="lg-msg">{e.message}</span>
         </div>
       {/each}

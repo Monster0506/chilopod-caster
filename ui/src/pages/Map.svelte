@@ -55,7 +55,7 @@
   }
 
   function formatDuration(start) {
-    if (!start) return '—';
+    if (!start) return '-';
     const sec = Math.floor((Date.now() - new Date(start).getTime()) / 1000);
     if (sec < 60) return sec + 's';
     if (sec < 3600) return Math.floor(sec / 60) + 'm ' + (sec % 60) + 's';
@@ -65,7 +65,7 @@
   }
 
   function formatBytes(n) {
-    if (n == null) return '—';
+    if (n == null) return '-';
     if (n < 1024) return n + ' B';
     if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
     return (n / (1024 * 1024)).toFixed(1) + ' MB';
@@ -204,8 +204,8 @@
       const marker = L.marker([r.lat, r.lon], { icon: dotIcon('#3b82f6') });
       marker.bindPopup(
         `<b>Rover ${escapeHtml(r.auth_user ?? r.id)}</b><br>` +
-          `IP: ${escapeHtml(r.ip ?? '—')}<br>` +
-          `Mountpoint: ${escapeHtml(r.mountpoint ?? r.assigned_base ?? '—')}<br>` +
+          `IP: ${escapeHtml(r.ip ?? '-')}<br>` +
+          `Mountpoint: ${escapeHtml(r.mountpoint ?? r.assigned_base ?? '-')}<br>` +
           `Connected: ${formatDuration(r.start)}<br>` +
           `Received: ${formatBytes(r.received_bytes)}<br>` +
           `<span class="map-popup-mono">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span>`,
@@ -368,9 +368,9 @@
           onclick={() => flyToRover(r)}
           title={r.lat != null ? 'Click to locate on map' : ''}
         >
-          <td class="mono">{r.auth_user ?? '—'}</td>
+          <td class="mono">{r.auth_user ?? '-'}</td>
           <td class="mono">{r.ip}</td>
-          <td class="mono">{r.mountpoint ?? r.assigned_base ?? '—'}</td>
+          <td class="mono">{r.mountpoint ?? r.assigned_base ?? '-'}</td>
           <td class="mono">{r.lat != null ? `${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}` : 'no GGA yet'}</td>
           <td class="mono">{formatDuration(r.start)}</td>
           <td class="mono">{formatBytes(r.received_bytes)}</td>

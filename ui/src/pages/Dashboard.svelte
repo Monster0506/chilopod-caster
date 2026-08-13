@@ -37,7 +37,7 @@
 
   function memAllocated(mem) {
     const bytes = mem?.jemalloc?.stats?.allocated;
-    if (bytes == null) return '—';
+    if (bytes == null) return '-';
     return (bytes / 1024 / 1024).toFixed(1) + ' MB';
   }
 
