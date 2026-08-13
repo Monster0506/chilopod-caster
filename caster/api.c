@@ -58,8 +58,11 @@ static json_object *api_ntrip_json(struct ntrip_state *st) {
 		 * it's actually receiving data from right now -- set once NEAR
 		 * has resolved a base, updated on each subsequent switch.
 		 */
-		if (st->virtual_mountpoint)
+		if (st->virtual_mountpoint) {
 			json_object_object_add_ex(new_obj, "assigned_base", json_object_new_string(st->virtual_mountpoint), JSON_C_CONSTANT_NEW);
+			if (st->last_pos_valid)
+				json_object_object_add_ex(new_obj, "dist_to_base_m", json_object_new_double(distance(&st->mountpoint_pos, &st->last_pos)), JSON_C_CONSTANT_NEW);
+		}
 
 		if (st->last_pos_valid) {
 			json_object_object_add_ex(new_obj, "lat", json_object_new_double(st->last_pos.lat), JSON_C_CONSTANT_NEW);
