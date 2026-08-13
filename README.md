@@ -47,6 +47,7 @@ Building Chilopod from source requires a C compiler, `make`, and Go 1.24 or newe
 | json-c | 0.16 |
 | openssl | 3.0.15 |
 
+A minimal Debian/Ubuntu install has neither a compiler nor these libraries by default. Install them with apt:
 
 ```sh
 sudo apt install build-essential libcyaml-dev libevent-dev libjson-c-dev libssl-dev
@@ -100,6 +101,12 @@ The pre-built UI is in `ui/dist/` and is committed to the repository. No Node.js
 To rebuild after making changes to the UI source:
 NOT REQUIRED:
 
+```sh
+cd ui
+npm install
+npm run build
+```
+
 Chilopod serves the output in `ui/dist/` at `/adm/ui/`. Copy this output to the `ui_dir` directory in the configuration:
 
 ```sh
@@ -116,13 +123,14 @@ These steps configure Chilopod as a dedicated system service. Run the steps as t
    useradd --system --no-create-home --shell /usr/sbin/nologin caster
    ```
 
-2. Install the `caster` daemon and `mapi` tool (both go to `/usr/local/sbin/` by default, per the Makefile's `DEST_DIR`), and the sidecar binary you built earlier:
+2. Install the `caster` daemon and `mapi` tool (both go to `/usr/local/sbin/` by default, per the Makefile's `DEST_DIR`), the sidecar binary you built earlier, and the wrapper script that runs both together as one unit:
    ```sh
    cd caster && make install
    cd ..
    install -m 0755 rtcm-go/sidecar /usr/local/sbin/sidecar
+   install -m 0755 sample-config/chilopod-run.sh /usr/local/sbin/chilopod-run.sh
    ```
-   Note: By default, the Makefile's `DEST_DIR` variable installs both to `/usr/local/sbin/`.
+   Note: By default, the Makefile's `DEST_DIR` variable installs `caster` and `mapi` to `/usr/local/sbin/`.
 
 3. Create the configuration and log directories:
    ```sh
@@ -144,48 +152,15 @@ These steps configure Chilopod as a dedicated system service. Run the steps as t
 
 See [Configuration Reference](#configuration-reference).
 
-6. Run the caster:
-   ```sh
-   /usr/local/sbin/caster -d
-   ```
-   Or create a systemd unit. See [Running](#running).
-
-7. Run the sidecar, pointed at the same file you set as `sidecar_stats_file`:
-   ```sh
-   /usr/local/sbin/sidecar -caster 127.0.0.1:2101 -out /usr/local/etc/chilopod/mountpoints.json -poll 30s
-   ```
-   The `-out` path must match `sidecar_stats_file` in `caster.yaml` exactly. Or create a systemd unit. See [Running](#running).
+6. Run Chilopod. The caster and the sidecar can run as two separate processes, or together as one systemd unit -- see [Running](#running).
 
 Running
 =======
 
-**Direct:** `/usr/local/sbin/caster -d`
-
-**systemd:** Create `/etc/systemd/system/caster.service`:
-
-```ini
-[Unit]
-Description=Chilopod NTRIP Caster
-After=network.target
-
-[Service]
-ExecStart=/usr/local/sbin/caster -d
-User=caster
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then:
-```sh
-systemctl daemon-reload
-systemctl enable --now caster
-```
-
-Run the sidecar the same way, pointed at the caster you just started:
+**Direct:** Run the caster and the sidecar as two separate processes:
 
 ```sh
+/usr/local/sbin/caster -d
 /usr/local/sbin/sidecar -caster 127.0.0.1:2101 -out /usr/local/etc/chilopod/mountpoints.json -poll 30s
 ```
 
@@ -197,16 +172,25 @@ Run the sidecar the same way, pointed at the caster you just started:
 
 > **CAUTION: `-out` must point to the exact same file as `sidecar_stats_file` in `caster.yaml`.** Chilopod does not check this for you. If the paths do not match, the admin API omits the `"sidecar"` key for every mountpoint, and gives no error. Use an absolute path on both sides.
 
-**systemd:** Create `/etc/systemd/system/sidecar.service`:
+**systemd:** Run both from one unit, using the `chilopod-run.sh` wrapper script installed in [Installation](#installation):
+
+```sh
+#!/bin/sh
+/usr/local/sbin/sidecar -caster 127.0.0.1:2101 -out /usr/local/etc/chilopod/mountpoints.json -poll 30s &
+exec /usr/local/sbin/caster
+```
+
+The wrapper starts the sidecar in the background, then execs the caster in the foreground. This gives systemd one process to track. The caster runs here without `-d`, since a `Type=simple` unit expects its `ExecStart` process to stay in the foreground rather than fork and detach.
+
+Create `/etc/systemd/system/caster.service`:
 
 ```ini
 [Unit]
-Description=Chilopod rtcm-go Sidecar
-After=network.target caster.service
-Requires=caster.service
+Description=Chilopod NTRIP Caster (with rtcm-go sidecar)
+After=network.target
 
 [Service]
-ExecStart=/usr/local/sbin/sidecar -caster 127.0.0.1:2101 -out /usr/local/etc/chilopod/mountpoints.json -poll 30s
+ExecStart=/usr/local/sbin/chilopod-run.sh
 User=caster
 Restart=on-failure
 
@@ -217,7 +201,7 @@ WantedBy=multi-user.target
 Then:
 ```sh
 systemctl daemon-reload
-systemctl enable --now sidecar
+systemctl enable --now caster
 ```
 
 How Chilopod Works
