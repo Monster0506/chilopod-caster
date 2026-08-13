@@ -213,12 +213,20 @@ char *b64decode(char *str, size_t len, int add_nul) {
 }
 
 /*
- * Parse a NMEA "GGA" line and return geographical position, if valid.
+ * Parse a NMEA "GGA" line and return the full decoded sentence, if valid.
+ *
+ * Field layout (comma-separated, 15 fields including the leading "$xxGGA"):
+ * time,lat,N/S,lon,E/W,quality,nsats,hdop,alt,M,geoid_sep,M,diff_age,diff_station*checksum
  */
-int parse_gga(const char *line, pos_t *pos) {
-	pos_t p;
+int parse_gga(const char *line, gga_t *gga) {
+	gga_t g;
 	int n;
-	int fix_type = 0;
+
+	memset(&g, 0, sizeof g);
+	g.nsats = -1;
+	g.hdop = -1;
+	g.diff_age = -1;
+	g.diff_station = -1;
 
 	/* Skip garbage before the initial $, including any Ntrip-GGA: prefix */
 
@@ -244,7 +252,13 @@ int parse_gga(const char *line, pos_t *pos) {
 	char *septmp = gga_line;
 	for (n = 0; (token = strsep(&septmp, ",")) != NULL; n++) {
 		float s1, s2;
+		char *star;
 		switch(n) {
+		case 1:
+			/* Time, hhmmss.ss (UTC) */
+			strncpy(g.time, token, sizeof g.time - 1);
+			g.time[sizeof g.time - 1] = '\0';
+			break;
 		case 2:
 			/* Latitude */
 			if (sscanf(token, "%2f%f", &s1, &s2) != 2) {
@@ -253,13 +267,13 @@ int parse_gga(const char *line, pos_t *pos) {
 				if (s1 < 0 || s2 < 0 || s1 > 90. || s2 >= 60. || s1 + s2/60 > 90.)
 					err = 1;
 				else
-					p.lat = s1 + s2/60;
+					g.pos.lat = s1 + s2/60;
 			}
 			break;
 		case 3:
 			/* North/South */
 			if (!strcmp(token, "S")) {
-				p.lat = -p.lat;
+				g.pos.lat = -g.pos.lat;
 			} else if (strcmp(token, "N")) {
 				err = 1;
 			}
@@ -272,29 +286,48 @@ int parse_gga(const char *line, pos_t *pos) {
 				if (s1 < 0 || s2 < 0 || s1 > 180. || s2 >= 60. || s1 + s2/60 > 180.)
 					err = 1;
 				else
-					p.lon = s1 + s2/60;
+					g.pos.lon = s1 + s2/60;
 			}
 			break;
 		case 5:
 			/* East/West */
 			if (!strcmp(token, "W")) {
-				p.lon = -p.lon;
+				g.pos.lon = -g.pos.lon;
 			} else if (strcmp(token, "E")) {
 				err = 1;
 			}
 			break;
 		case 6:
-			/* Fix type, 0 = invalid */
-			if (sscanf(token, "%d", &fix_type) != 1 || fix_type == 0)
+			/* Fix quality, 0 = invalid */
+			if (sscanf(token, "%d", &g.quality) != 1 || g.quality == 0)
 				err = 1;
 			break;
 		case 7:
-			/* Check number of satellites for the fix */
-#if 0
-			int nsats;
-			if (fix_type == 0 || sscanf(token, "%d", &nsats) != 1 || nsats < 4)
-				err = 1;
-#endif
+			/* Number of satellites used in the fix */
+			sscanf(token, "%d", &g.nsats);
+			break;
+		case 8:
+			/* Horizontal dilution of precision */
+			sscanf(token, "%f", &g.hdop);
+			break;
+		case 9:
+			/* Altitude above mean sea level, meters */
+			sscanf(token, "%f", &g.alt);
+			break;
+		case 11:
+			/* Geoid separation, meters */
+			sscanf(token, "%f", &g.geoid_sep);
+			break;
+		case 13:
+			/* Age of differential corrections, seconds */
+			sscanf(token, "%f", &g.diff_age);
+			break;
+		case 14:
+			/* Differential reference station id; a checksum follows a '*' */
+			star = strchr(token, '*');
+			if (star)
+				*star = '\0';
+			sscanf(token, "%d", &g.diff_station);
 			break;
 		}
 	}
@@ -305,7 +338,7 @@ int parse_gga(const char *line, pos_t *pos) {
 	 */
 	if (err || n != 15)
 		return -1;
-	*pos = p;
+	*gga = g;
 	return 1;
 }
 

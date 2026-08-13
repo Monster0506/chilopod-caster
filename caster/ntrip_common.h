@@ -230,6 +230,8 @@ struct ntrip_state {
 	// Position gathered from GGA lines sent by a NTRIP client
 	char last_pos_valid;			// last_pos and max_min_dist are valid
 	pos_t last_pos;				// last known position
+	gga_t last_gga;				// full last decoded GGA sentence
+	struct timeval last_gga_date;		// when last_gga was received
 #define POS_HISTORY_SIZE 20
 	pos_t pos_history[POS_HISTORY_SIZE];	// ring buffer of recent positions, oldest to newest via pos_history_next
 	int pos_history_count;			// number of valid entries, caps at POS_HISTORY_SIZE
