@@ -1,10 +1,14 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
-  import { Pencil, Plus, Trash2, X } from '@lucide/svelte';
+  import JsonTree from '../lib/JsonTree.svelte';
+  import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from '@lucide/svelte';
 
   let table = $state(null);
   let net = $state(null);
   let auth = $state(null);
+  let rtcm = $state(null);
+  let expandedRtcm = $state(null);
+  let selectedMessage = $state(null);
   let error = $state('');
   let autoRefresh = $state(true);
   let showForm = $state(false);
@@ -41,16 +45,82 @@
 
   async function fetchAll() {
     try {
-      const [tables, connections, authEntries] = await Promise.all([
-        apiGet('sourcetables'), apiGet('net'), apiGet('auth'),
+      const [tables, connections, authEntries, rtcmInfo] = await Promise.all([
+        apiGet('sourcetables'), apiGet('net'), apiGet('auth'), apiGet('rtcm'),
       ]);
       error = '';
       table = tables.find((t) => t.host === 'LOCAL') ?? { mountpoints: {} };
       net = connections;
       auth = authEntries;
+      rtcm = rtcmInfo;
     } catch (e) {
       error = e.message;
     }
+  }
+
+  function rtcmFor(mountpoint) {
+    return rtcm?.[mountpoint] ?? null;
+  }
+
+  function rtcmTypes(info) {
+    if (!info?.types) return [];
+    return info.types.split(',').filter(Boolean);
+  }
+
+  function toggleRtcmDetail(mountpoint) {
+    expandedRtcm = expandedRtcm === mountpoint ? null : mountpoint;
+  }
+
+  function openMessageDetail(mountpoint, msgType) {
+    const data = rtcmFor(mountpoint)?.sidecar?.last_messages?.[msgType] ?? null;
+    selectedMessage = { mountpoint, msgType, data };
+  }
+
+  function closeMessageDetail() {
+    selectedMessage = null;
+  }
+
+  function messageTypeName(msgType) {
+    return rtcm?._type_names?.[msgType] ?? `RTCM ${msgType}`;
+  }
+
+  function sidecarConstellations(info) {
+    const c = info?.sidecar?.constellations;
+    if (!c) return [];
+    return Object.entries(c).sort(([a], [b]) => a.localeCompare(b));
+  }
+
+  const CONSTELLATION_ORDER = [
+    ['GPS', 'GPS'],
+    ['GLONASS', 'GLO'],
+    ['Galileo', 'GAL'],
+    ['BeiDou', 'BDS'],
+    ['QZSS', 'QZS'],
+    ['SBAS', 'SBAS'],
+  ];
+
+  function navSystemDisplay(key, mnt) {
+    const c = rtcmFor(key)?.sidecar?.constellations;
+    if (c) {
+      const parts = CONSTELLATION_ORDER
+        .filter(([name]) => c[name] > 0)
+        .map(([name, abbr]) => `${c[name]}${abbr}`);
+      if (parts.length > 0) return parts.join('+');
+    }
+    return strField(mnt.str, 6);
+  }
+
+  function hasAntennaInfo(sidecar) {
+    return !!(sidecar?.antenna_descriptor || sidecar?.receiver_type);
+  }
+
+  function formatAgo(dateStr) {
+    if (!dateStr) return '-';
+    const sec = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    if (sec < 0) return 'just now';
+    if (sec < 60) return sec + 's ago';
+    if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+    return Math.floor(sec / 3600) + 'h ago';
   }
 
   function liveInfo(mountpoint) {
@@ -69,7 +139,7 @@
 
   function formatLatency(live) {
     const rtt = live?.tcp_info?.rtt;
-    if (rtt == null) return '—';
+    if (rtt == null) return '-';
     return (rtt / 1000).toFixed(1) + ' ms';
   }
 
@@ -257,7 +327,7 @@
             <td class="mono">{key}</td>
             <td>{strField(mnt.str, 2)}</td>
             <td class="mono">{strField(mnt.str, 3)}</td>
-            <td class="mono">{strField(mnt.str, 6)}</td>
+            <td class="mono">{navSystemDisplay(key, mnt)}</td>
             <td class="mono">{mnt.lat.toFixed(4)}, {mnt.lon.toFixed(4)}</td>
             <td>
               {#if mnt.virtual}
@@ -268,7 +338,7 @@
                 <span class="badge badge-disconnected">no source</span>
               {/if}
             </td>
-            <td class="mono">{mnt.virtual ? '—' : formatLatency(live)}</td>
+            <td class="mono">{mnt.virtual ? '-' : formatLatency(live)}</td>
             <td>
               {#if mnt.virtual}
                 <span class="auth-na">n/a</span>
@@ -302,6 +372,13 @@
                 <button class="cancel-btn" onclick={cancelAuthEdit} disabled={savingAuth}>Cancel</button>
               {:else}
                 {#if !mnt.virtual}
+                  <button
+                    class="rtcm-btn"
+                    onclick={() => toggleRtcmDetail(key)}
+                    title={expandedRtcm === key ? 'Hide RTCM detail' : 'Show RTCM detail'}
+                  >
+                    {#if expandedRtcm === key}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
+                  </button>
                   <button class="auth-btn" onclick={() => startAuthEdit(key)} title={authEntry ? 'Edit' : 'Add'}>
                     {#if authEntry}<Pencil size={14} />{:else}<Plus size={14} />{/if}
                   </button>
@@ -327,11 +404,131 @@
               {/if}
             </td>
           </tr>
+          {#if expandedRtcm === key}
+            {@const info = rtcmFor(key)}
+            {@const types = rtcmTypes(info)}
+            <tr class="rtcm-detail-row">
+              <td colspan="9">
+                <div class="rtcm-detail">
+                  <div class="rtcm-detail-section">
+                    <h4>Message types seen</h4>
+                    {#if types.length === 0}
+                      <p class="rtcm-empty">No RTCM messages received yet.</p>
+                    {:else}
+                      <div class="rtcm-types">
+                        {#each types as t (t)}
+                          <button
+                            type="button"
+                            class="rtcm-type-badge rtcm-type-badge-btn"
+                            onclick={() => openMessageDetail(key, t)}
+                            title="Show decoded message"
+                          >
+                            {t}
+                          </button>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                  {#if info?.pos}
+                    <div class="rtcm-detail-section">
+                      <h4>Station position (from RTCM 1005/1006)</h4>
+                      <div class="rtcm-pos-grid">
+                        <div><span class="rtcm-label">Lat</span> <span class="mono">{info.pos.lat.toFixed(7)}</span></div>
+                        <div><span class="rtcm-label">Lon</span> <span class="mono">{info.pos.lon.toFixed(7)}</span></div>
+                        <div><span class="rtcm-label">Alt</span> <span class="mono">{info.pos.alt.toFixed(3)} m</span></div>
+                        <div><span class="rtcm-label">ECEF X</span> <span class="mono">{(info.pos.x / 10000).toFixed(4)} m</span></div>
+                        <div><span class="rtcm-label">ECEF Y</span> <span class="mono">{(info.pos.y / 10000).toFixed(4)} m</span></div>
+                        <div><span class="rtcm-label">ECEF Z</span> <span class="mono">{(info.pos.z / 10000).toFixed(4)} m</span></div>
+                        <div><span class="rtcm-label">Updated</span> <span class="mono">{formatAgo(info.pos.date)}</span></div>
+                      </div>
+                    </div>
+                  {/if}
+                  {#if info?.sidecar}
+                    {@const sc = info.sidecar}
+                    {@const constellations = sidecarConstellations(info)}
+                    <div class="rtcm-detail-section">
+                      <h4>
+                        Satellites
+                        <span class="sidecar-status" class:sidecar-connected={sc.connected} class:sidecar-disconnected={!sc.connected}>
+                          {sc.connected ? 'sidecar connected' : 'sidecar disconnected'}
+                        </span>
+                      </h4>
+                      {#if constellations.length === 0}
+                        <p class="rtcm-empty">No satellites decoded yet.</p>
+                      {:else}
+                        <div class="rtcm-types">
+                          {#each constellations as [name, count] (name)}
+                            <span class="rtcm-type-badge">{name}: {count}</span>
+                          {/each}
+                        </div>
+                        <p class="sidecar-total mono">{sc.satellite_count} total</p>
+                      {/if}
+                      {#if sc.last_error}
+                        <p class="sidecar-error">{sc.last_error}</p>
+                      {/if}
+                      <p class="sidecar-updated mono">Updated {formatAgo(sc.last_updated)}</p>
+                    </div>
+                    {#if hasAntennaInfo(sc)}
+                      <div class="rtcm-detail-section">
+                        <h4>Antenna / receiver (from RTCM 1008/1033)</h4>
+                        <div class="rtcm-pos-grid">
+                          {#if sc.antenna_descriptor}
+                            <div><span class="rtcm-label">Antenna</span> <span class="mono">{sc.antenna_descriptor}</span></div>
+                          {/if}
+                          {#if sc.antenna_serial}
+                            <div><span class="rtcm-label">Serial</span> <span class="mono">{sc.antenna_serial}</span></div>
+                          {/if}
+                          {#if sc.receiver_type}
+                            <div><span class="rtcm-label">Receiver</span> <span class="mono">{sc.receiver_type}</span></div>
+                          {/if}
+                          {#if sc.firmware_version}
+                            <div><span class="rtcm-label">Firmware</span> <span class="mono">{sc.firmware_version}</span></div>
+                          {/if}
+                          {#if sc.receiver_serial}
+                            <div><span class="rtcm-label">Rcv serial</span> <span class="mono">{sc.receiver_serial}</span></div>
+                          {/if}
+                        </div>
+                      </div>
+                    {/if}
+                  {/if}
+                </div>
+              </td>
+            </tr>
+          {/if}
         {/each}
       </tbody>
     </table>
   </div>
   <p class="count">{entries.length} mountpoint{entries.length === 1 ? '' : 's'}</p>
+{/if}
+
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape') closeMessageDetail(); }} />
+
+{#if selectedMessage}
+  <div class="modal-overlay">
+    <button type="button" class="modal-backdrop" onclick={closeMessageDetail} aria-label="Close"></button>
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Decoded RTCM message">
+      <div class="modal-header">
+        <h3>
+          {selectedMessage.mountpoint}
+          <span class="mono">- {messageTypeName(selectedMessage.msgType)} ({selectedMessage.msgType})</span>
+        </h3>
+        <button type="button" class="modal-close" onclick={closeMessageDetail} title="Close">
+          <X size={16} />
+        </button>
+      </div>
+      <div class="modal-body">
+        {#if selectedMessage.data === null}
+          <p class="rtcm-empty">
+            No decoded message cached yet for this type. The sidecar may not be running, or hasn't
+            decoded one since it started.
+          </p>
+        {:else}
+          <JsonTree value={selectedMessage.data} />
+        {/if}
+      </div>
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -536,6 +733,129 @@
     background: #22263a;
   }
 
+  .rtcm-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem;
+    background: transparent;
+    border: 1px solid #1e3a5f;
+    border-radius: 4px;
+    color: #93c5fd;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 120ms;
+  }
+
+  .rtcm-btn:hover:not(:disabled) {
+    background: #1e3a5f33;
+  }
+
+  .rtcm-detail-row td {
+    background: #14161f;
+    padding: 1rem 1.25rem;
+  }
+
+  .rtcm-detail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+  }
+
+  .rtcm-detail-section h4 {
+    margin: 0 0 0.6rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .rtcm-empty {
+    margin: 0;
+    font-size: 0.82rem;
+    color: #475569;
+  }
+
+  .rtcm-types {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    max-width: 480px;
+  }
+
+  .rtcm-type-badge {
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-family: monospace;
+    background: #1e3a5f;
+    color: #93c5fd;
+  }
+
+  .rtcm-type-badge-btn {
+    border: none;
+    cursor: pointer;
+    transition: background 120ms;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .rtcm-type-badge-btn:hover:not(:disabled) {
+    background: #2563eb;
+    color: #dbeafe;
+  }
+
+  .rtcm-pos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.5rem 1.5rem;
+    font-size: 0.82rem;
+  }
+
+  .rtcm-label {
+    display: inline-block;
+    width: 60px;
+    color: #64748b;
+  }
+
+  .sidecar-status {
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.68rem;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .sidecar-connected {
+    background: #1a3a1a;
+    color: #86efac;
+  }
+
+  .sidecar-disconnected {
+    background: #3a1a1a;
+    color: #fca5a5;
+  }
+
+  .sidecar-total {
+    margin: 0.5rem 0 0;
+    font-size: 0.78rem;
+    color: #64748b;
+  }
+
+  .sidecar-error {
+    margin: 0.4rem 0 0;
+    font-size: 0.78rem;
+    color: #fca5a5;
+  }
+
+  .sidecar-updated {
+    margin: 0.3rem 0 0;
+    font-size: 0.75rem;
+    color: #475569;
+  }
+
   .detect-btn {
     padding: 0.25rem 0.6rem;
     background: transparent;
@@ -661,5 +981,78 @@
   .loading {
     color: #475569;
     font-size: 0.9rem;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  .modal-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    padding: 0;
+    background: rgba(8, 10, 16, 0.7);
+    border: none;
+    cursor: default;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .modal-backdrop:hover:not(:disabled) {
+    background: rgba(8, 10, 16, 0.7);
+  }
+
+  .modal {
+    position: relative;
+    z-index: 1;
+    width: min(640px, 90vw);
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    background: #14161f;
+    border: 1px solid #2a2d3a;
+    border-radius: 8px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid #2a2d3a;
+  }
+
+  .modal-header h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #e2e8f0;
+    font-weight: 600;
+  }
+
+  .modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem;
+    background: transparent;
+    border: 1px solid #2a2d3a;
+    border-radius: 4px;
+    color: #94a3b8;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .modal-close:hover:not(:disabled) {
+    background: #22263a;
+  }
+
+  .modal-body {
+    padding: 1rem 1.1rem;
+    overflow: auto;
   }
 </style>
