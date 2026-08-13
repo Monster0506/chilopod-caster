@@ -937,6 +937,45 @@ struct mime_content *api_detect_source_json(struct caster_state *caster, struct 
 	return mime_new(s, -1, "application/json", 1);
 }
 
+/*
+ * Update an existing mountpoint's group 
+ */
+struct mime_content *api_edit_source_json(struct caster_state *caster, struct request *req) {
+	struct config *config = req->st->config;
+	char *mountpoint = (char *)hash_table_get(req->hash, "mountpoint");
+	char *group = (char *)hash_table_get(req->hash, "group");
+	char *identifier = (char *)hash_table_get(req->hash, "identifier");
+
+	if (!mountpoint || !*mountpoint)
+		return api_error_json("mountpoint is required");
+	if (!field_is_safe(mountpoint))
+		return api_error_json("invalid characters in mountpoint");
+
+	if (group) {
+		if (!*group)
+			group = "NONE";
+		if (!field_is_safe(group))
+			return api_error_json("invalid characters in group");
+		int r = update_sourcetable_field(caster->config_dir, config->sourcetable_filename, mountpoint, 7, group);
+		if (r <= 0)
+			return api_error_json(r < 0 ? "cannot rewrite sourcetable_file" : "mountpoint not found in sourcetable");
+	}
+
+	if (identifier) {
+		if (!*identifier)
+			identifier = mountpoint;
+		if (!field_is_safe(identifier))
+			return api_error_json("invalid characters in identifier");
+		int r = update_sourcetable_field(caster->config_dir, config->sourcetable_filename, mountpoint, 2, identifier);
+		if (r <= 0)
+			return api_error_json(r < 0 ? "cannot rewrite sourcetable_file" : "mountpoint not found in sourcetable");
+	}
+
+	caster_reload(caster);
+	char *s = mystrdup("{\"result\": 0}\n");
+	return mime_new(s, -1, "application/json", 1);
+}
+
 struct mime_content *api_sync_json(struct caster_state *caster, struct request *req) {
 	const char *type = json_object_get_string(json_object_object_get(req->json, "type"));
 
