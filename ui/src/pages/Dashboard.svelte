@@ -1,10 +1,6 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
-
-  const GGA_QUALITY = {
-    0: 'Invalid', 1: 'GPS (Standalone)', 2: 'DGPS', 3: 'PPS',
-    4: 'RTK Fixed', 5: 'RTK Float', 6: 'Estimated', 7: 'Manual', 8: 'Simulation',
-  };
+  import { ggaQualityColor, ggaQualityLabel } from '../lib/gga.js';
 
   const HISTORY_MAX = 20;
   const POLL_MS = 5000;
@@ -345,25 +341,18 @@
         </div>
         <div class="table-scroll">
           <table class="mini">
-            <thead><tr><th>User</th><th>Base</th><th>Dist</th><th>Fix</th></tr></thead>
+            <thead><tr><th></th><th>User</th><th>Base</th><th>Dist</th><th>Fix</th></tr></thead>
             <tbody>
               {#if roverList.length === 0}
-                <tr><td colspan="4" class="empty-cell">No rovers connected.</td></tr>
+                <tr><td colspan="5" class="empty-cell">No rovers connected.</td></tr>
               {/if}
               {#each roverList as r (r.id)}
                 <tr>
+                  <td><span class="dot" style="background:{ggaQualityColor(r.gga?.quality)}"></span></td>
                   <td class="mono">{r.auth_user ?? r.ip}</td>
                   <td class="mono">{r.assigned_base ?? r.mountpoint ?? '—'}</td>
                   <td class="mono">{formatDist(r.dist_to_base_m)}</td>
-                  <td>
-                    {#if r.gga}
-                      <span class="badge" class:good={r.gga.quality === 4} class:warn={r.gga.quality === 5} class:neutral={r.gga.quality !== 4 && r.gga.quality !== 5}>
-                        {GGA_QUALITY[r.gga.quality] ?? r.gga.quality}
-                      </span>
-                    {:else}
-                      <span class="badge neutral">no GGA</span>
-                    {/if}
-                  </td>
+                  <td>{ggaQualityLabel(r.gga?.quality)}</td>
                 </tr>
               {/each}
             </tbody>
@@ -582,23 +571,6 @@
     align-items: center;
     gap: 0.4rem;
   }
-
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.68rem;
-    font-weight: 600;
-    padding: 0.15rem 0.45rem;
-    border-radius: 4px;
-    font-family: monospace;
-    white-space: nowrap;
-    background: #22263a;
-    color: #94a3b8;
-  }
-  .badge.good { background: #14301b; color: #86efac; }
-  .badge.warn { background: #3a2a0f; color: #fbbf24; }
-  .badge.neutral { background: #22263a; color: #94a3b8; }
 
   .mono {
     font-family: monospace;

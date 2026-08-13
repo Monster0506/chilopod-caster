@@ -1,5 +1,6 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
+  import { ggaQualityColor, ggaQualityLabel } from '../lib/gga.js';
   import { ChevronDown, ChevronRight } from '@lucide/svelte';
 
   let data = $state(null);
@@ -8,11 +9,6 @@
   let dropping = $state(new Set());
   let dropMsg = $state('');
   let expandedGga = $state(null);
-
-  const GGA_QUALITY = {
-    0: 'Invalid', 1: 'GPS (Standalone)', 2: 'DGPS', 3: 'PPS',
-    4: 'RTK Fixed', 5: 'RTK Float', 6: 'Estimated', 7: 'Manual', 8: 'Simulation',
-  };
 
   function toggleGga(id) {
     expandedGga = expandedGga === id ? null : id;
@@ -114,6 +110,7 @@
           <th>Latency</th>
           <th>Requested</th>
           <th>Assigned base</th>
+          <th>Fix</th>
           <th>User</th>
           <th>Connected</th>
           <th></th>
@@ -121,7 +118,7 @@
       </thead>
       <tbody>
         {#if list.length === 0}
-          <tr><td colspan="8" class="empty">No rovers connected.</td></tr>
+          <tr><td colspan="9" class="empty">No rovers connected.</td></tr>
         {/if}
         {#each list as conn (conn.id)}
           <tr>
@@ -130,6 +127,7 @@
             <td class="mono">{formatLatency(conn)}</td>
             <td class="mono">{conn.mountpoint ?? '-'}</td>
             <td class="mono">{conn.assigned_base ?? '-'}</td>
+            <td><span class="fix-cell"><span class="dot" style="background:{ggaQualityColor(conn.gga?.quality)}"></span>{ggaQualityLabel(conn.gga?.quality)}</span></td>
             <td class="mono">{conn.auth_user ?? '-'}</td>
             <td class="mono">{formatDuration(conn.start)}</td>
             <td class="actions">
@@ -154,7 +152,7 @@
           {#if expandedGga === conn.id && conn.gga}
             {@const gga = conn.gga}
             <tr class="gga-detail-row">
-              <td colspan="8">
+              <td colspan="9">
                 <div class="gga-detail">
                   <div class="gga-detail-section">
                     <h4>GGA fix</h4>
@@ -163,7 +161,7 @@
                       {#if conn.dist_to_base_m != null}
                         <div><span class="gga-label">Dist to base</span> <span class="mono">{formatDist(conn.dist_to_base_m)}</span></div>
                       {/if}
-                      <div><span class="gga-label">Quality</span> <span class="mono">{GGA_QUALITY[gga.quality] ?? gga.quality}</span></div>
+                      <div><span class="gga-label">Quality</span> <span class="mono">{ggaQualityLabel(gga.quality)}</span></div>
                       {#if gga.nsats != null}
                         <div><span class="gga-label">Sats</span> <span class="mono">{gga.nsats}</span></div>
                       {/if}
@@ -324,6 +322,20 @@
 
   .gga-btn:hover:not(:disabled) {
     background: #1e3a5f33;
+  }
+
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .fix-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
   }
 
   .gga-detail-row td {

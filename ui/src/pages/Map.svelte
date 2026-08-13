@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { apiGet } from '../lib/api.js';
+  import { ggaQualityColor, ggaQualityLabel } from '../lib/gga.js';
   import L from 'leaflet';
   import 'leaflet/dist/leaflet.css';
 
@@ -44,10 +45,11 @@
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  function dotIcon(color) {
+  function dotIcon(color, ringColor) {
+    const ringStyle = ringColor ? `border-color:${ringColor};border-width:3px;` : '';
     return L.divIcon({
       className: 'map-dot-icon',
-      html: `<span class="map-dot" style="background:${color}"></span>`,
+      html: `<span class="map-dot" style="background:${color};${ringStyle}"></span>`,
       iconSize: [14, 14],
       iconAnchor: [7, 7],
       popupAnchor: [0, -7],
@@ -201,11 +203,12 @@
         }
       }
 
-      const marker = L.marker([r.lat, r.lon], { icon: dotIcon('#3b82f6') });
+      const marker = L.marker([r.lat, r.lon], { icon: dotIcon('#3b82f6', ggaQualityColor(r.gga?.quality)) });
       marker.bindPopup(
         `<b>Rover ${escapeHtml(r.auth_user ?? r.id)}</b><br>` +
           `IP: ${escapeHtml(r.ip ?? '-')}<br>` +
           `Mountpoint: ${escapeHtml(r.mountpoint ?? r.assigned_base ?? '-')}<br>` +
+          `Fix: ${escapeHtml(ggaQualityLabel(r.gga?.quality))}<br>` +
           `Connected: ${formatDuration(r.start)}<br>` +
           `Received: ${formatBytes(r.received_bytes)}<br>` +
           `<span class="map-popup-mono">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span>`,
@@ -263,12 +266,23 @@
       options: { position: 'bottomleft' },
       onAdd() {
         const div = L.DomUtil.create('div', 'map-legend');
+        const fixRows = Object.entries({ 4: 'RTK Fixed', 5: 'RTK Float', 2: 'DGPS / PPS', 1: 'Standalone', '-1': 'No fix' })
+          .map(([q, label]) => {
+            const color = q === '-1' ? ggaQualityColor(null) : ggaQualityColor(Number(q));
+            return `<div><span class="map-legend-dot map-legend-ring" style="border-color:${color}"></span>${label}</div>`;
+          })
+          .join('');
         div.innerHTML =
+          '<div class="map-legend-columns">' +
+          '<div class="map-legend-col">' +
           '<div><span class="map-legend-dot" style="background:#22c55e"></span>Live base</div>' +
           '<div><span class="map-legend-dot" style="background:#64748b"></span>Declared, offline</div>' +
           '<div><span class="map-legend-dot" style="background:#3b82f6"></span>Rover</div>' +
           '<div><span class="map-legend-line" style="background:#c2410c"></span>Baseline</div>' +
-          '<div><span class="map-legend-line" style="background:#a78bfa"></span>NEAR coverage</div>';
+          '<div><span class="map-legend-line" style="background:#a78bfa"></span>NEAR coverage</div>' +
+          '</div>' +
+          `<div class="map-legend-col">${fixRows}</div>` +
+          '</div>';
         return div;
       },
     });
@@ -353,6 +367,7 @@
         <th>User</th>
         <th>IP</th>
         <th>Mountpoint</th>
+        <th>Fix</th>
         <th>Position</th>
         <th>Connected</th>
         <th>Received</th>
@@ -360,7 +375,7 @@
     </thead>
     <tbody>
       {#if rovers().length === 0}
-        <tr><td colspan="6" class="empty">No rovers connected.</td></tr>
+        <tr><td colspan="7" class="empty">No rovers connected.</td></tr>
       {/if}
       {#each rovers() as r (r.id)}
         <tr
@@ -371,6 +386,7 @@
           <td class="mono">{r.auth_user ?? '-'}</td>
           <td class="mono">{r.ip}</td>
           <td class="mono">{r.mountpoint ?? r.assigned_base ?? '-'}</td>
+          <td><span class="fix-cell"><span class="dot" style="background:{ggaQualityColor(r.gga?.quality)}"></span>{ggaQualityLabel(r.gga?.quality)}</span></td>
           <td class="mono">{r.lat != null ? `${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}` : 'no GGA yet'}</td>
           <td class="mono">{formatDuration(r.start)}</td>
           <td class="mono">{formatBytes(r.received_bytes)}</td>
@@ -464,6 +480,20 @@
   .badge-offline {
     background: #2a2d3a;
     color: #94a3b8;
+  }
+
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .fix-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
   }
 
   .table-wrap {
@@ -561,6 +591,21 @@
     box-shadow: none;
   }
 
+  :global(.map-legend-columns) {
+    display: flex;
+    gap: 0.9rem;
+  }
+
+  :global(.map-legend-col) {
+    display: flex;
+    flex-direction: column;
+  }
+
+  :global(.map-legend-col:first-child) {
+    padding-right: 0.9rem;
+    border-right: 1px solid #2a2d3a;
+  }
+
   :global(.map-legend-dot) {
     display: inline-block;
     width: 9px;
@@ -568,6 +613,12 @@
     border-radius: 50%;
     margin-right: 0.4rem;
     vertical-align: middle;
+  }
+
+  :global(.map-legend-ring) {
+    background: transparent;
+    border: 2px solid;
+    box-sizing: border-box;
   }
 
   :global(.map-legend-line) {
