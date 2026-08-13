@@ -11,7 +11,7 @@ Chilopod uses the libevent2 library. This library keeps the memory footprint sma
 - [Requirements](#requirements)
 - [Building](#building)
 - [Building the UI](#building-the-ui)
-- [Installation (Debian/Linux)](#installation-debianlinux)
+- [Installation](#installation)
 - [Running](#running)
 - [How Chilopod Works](#how-chilopod-works)
 - [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source)
@@ -38,7 +38,7 @@ Features
 Requirements
 ============
 
-Building Chilopod from source requires a C compiler and `make`, plus:
+Building Chilopod from source requires a C compiler, `make`, and Go 1.24 or newer, plus:
 
 | Library | Minimum version |
 |---|---|
@@ -47,15 +47,22 @@ Building Chilopod from source requires a C compiler and `make`, plus:
 | json-c | 0.16 |
 | openssl | 3.0.15 |
 
-A minimal Debian or FreeBSD install does not include a compiler or these libraries by default. Install them with the package manager for your platform.
-
-Debian: 
 
 ```sh
 sudo apt install build-essential libcyaml-dev libevent-dev libjson-c-dev libssl-dev
 ```
 
-This README also uses `curl` in the admin API examples. If you use `scripts/rtcm_bridge.py`, you also need `python3` (see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source)). A minimal install does not include either tool. Install both with:
+Debian and Ubuntu's `golang-go` package is often older than 1.24. Check with `go version`, and if it reports an older version, install Go from the official tarball instead (check [go.dev/dl](https://go.dev/dl/) for the current release):
+
+```sh
+curl -LO https://go.dev/dl/go1.24.0.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf go1.24.0.linux-amd64.tar.gz
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.profile
+source ~/.profile
+```
+
+You'll also want `curl` for the admin API examples throughout this README, and `python3` if you use `scripts/rtcm_bridge.py` (see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source))
 
 ```sh
 sudo apt install curl python3
@@ -64,20 +71,29 @@ sudo apt install curl python3
 Building
 ========
 
-Debian: 
-
 ```sh
 cd caster; make clean all
 ```
 
-This produces two binaries in `caster/`: `caster`, the daemon, and `tests`, the unit test suite. Run `./tests` to confirm the build before you install it.
+This produces two binaries inside `caster/`: `caster` (the daemon itself) and `tests`
+
+Chilopod's own RTCM3 decoding covers station position (1005/1006) and which message types have been seen, nothing more. To also decode satellite counts, per-constellation counts, and antenna/receiver info, build the sidecar from [rtcm-go](https://github.com/Monster0506/rtcm-go), a Go library with a companion binary at `cmd/sidecar`:
+
+```sh
+cd ..
+git clone https://github.com/Monster0506/rtcm-go
+cd rtcm-go
+go build -o sidecar ./cmd/sidecar
+cd ..
+```
 
 Building the UI
 ===============
 
-The pre-built UI files are in `ui/dist/`. These files are committed to the repository. You do not need Node.js to deploy Chilopod.
+The pre-built UI is in `ui/dist/` and is committed to the repository. No Node.js required to deploy.
 
-To rebuild the UI after a change to the source, run: `cd ui; npm install; npm run build`
+To rebuild after making changes to the UI source:
+NOT REQUIRED:
 
 Chilopod serves the output in `ui/dist/` at `/adm/ui/`. Copy this output to the `ui_dir` directory in the configuration:
 
@@ -85,8 +101,8 @@ Chilopod serves the output in `ui/dist/` at `/adm/ui/`. Copy this output to the 
 cp -r ui/dist/* /usr/local/etc/chilopod/ui/
 ```
 
-Installation (Debian/Linux)
-==========================
+Installation
+============
 
 These steps configure Chilopod as a dedicated system service. Run the steps as the root user.
 
@@ -95,9 +111,11 @@ These steps configure Chilopod as a dedicated system service. Run the steps as t
    useradd --system --no-create-home --shell /usr/sbin/nologin caster
    ```
 
-2. Install the binary and the `mapi` tool:
+2. Install the `caster` daemon and `mapi` tool (both go to `/usr/local/sbin/` by default, per the Makefile's `DEST_DIR`), and the sidecar binary you built earlier:
    ```sh
    cd caster && make install
+   cd ..
+   install -m 0755 rtcm-go/sidecar /usr/local/sbin/sidecar
    ```
    Note: By default, the Makefile's `DEST_DIR` variable installs both to `/usr/local/sbin/`.
 
@@ -117,23 +135,28 @@ These steps configure Chilopod as a dedicated system service. Run the steps as t
    cp sample-config/blocklist      /usr/local/etc/chilopod/blocklist
    ```
 
-5. Edit `/usr/local/etc/chilopod/caster.yaml` and `/usr/local/etc/chilopod/source.auth` for your setup. For more information, see [Configuration Reference](#configuration-reference).
+5. Edit `/usr/local/etc/chilopod/caster.yaml` and `/usr/local/etc/chilopod/source.auth` for your setup, including `sidecar_stats_file`.
+
+See [Configuration Reference](#configuration-reference).
 
 6. Run the caster:
    ```sh
    /usr/local/sbin/caster -d
    ```
-   You can also create a systemd unit instead. See [Running](#running).
+   Or create a systemd unit. See [Running](#running).
 
+7. Run the sidecar, pointed at the same file you set as `sidecar_stats_file`:
+   ```sh
+   /usr/local/sbin/sidecar -caster 127.0.0.1:2101 -out /usr/local/etc/chilopod/mountpoints.json -poll 30s
    ```
+   The `-out` path must match `sidecar_stats_file` in `caster.yaml` exactly. Or create a systemd unit. See [Running](#running).
 
 Running
 =======
 
+**Direct:** `/usr/local/sbin/caster -d`
 
-**Linux (direct):** `/usr/local/sbin/caster -d`
-
-**Linux (systemd):** Create `/etc/systemd/system/caster.service`:
+**systemd:** Create `/etc/systemd/system/caster.service`:
 
 ```ini
 [Unit]
@@ -155,10 +178,47 @@ systemctl daemon-reload
 systemctl enable --now caster
 ```
 
+Run the sidecar the same way, pointed at the caster you just started:
+
+```sh
+/usr/local/sbin/sidecar -caster 127.0.0.1:2101 -out /usr/local/etc/chilopod/mountpoints.json -poll 30s
+```
+
+| Flag | Meaning |
+|---|---|
+| `-caster` | The caster's own `host:port`, as an ordinary NTRIP client would connect to it |
+| `-out` | Path to write the stats file to |
+| `-poll` | How often to re-check the caster's sourcetable for mountpoints added or removed (default `60s`) |
+
+> **CAUTION: `-out` must point to the exact same file as `sidecar_stats_file` in `caster.yaml`.** Chilopod does not check this for you. If the paths do not match, the admin API omits the `"sidecar"` key for every mountpoint, and gives no error. Use an absolute path on both sides.
+
+**systemd:** Create `/etc/systemd/system/sidecar.service`:
+
+```ini
+[Unit]
+Description=Chilopod rtcm-go Sidecar
+After=network.target caster.service
+Requires=caster.service
+
+[Service]
+ExecStart=/usr/local/sbin/sidecar -caster 127.0.0.1:2101 -out /usr/local/etc/chilopod/mountpoints.json -poll 30s
+User=caster
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+```sh
+systemctl daemon-reload
+systemctl enable --now sidecar
+```
+
 How Chilopod Works
 ===================
 
-A single caster instance can perform three roles at the same time. You configure all three roles in the same `caster.yaml` file.
+A single running caster can fulfill 3 roles simultaneously, all configured from the same `caster.yaml`. Alongside these, the sidecar adds satellite and antenna info to the caster's own decoding.
 
 ## Regular NTRIP caster
 
@@ -183,6 +243,38 @@ The caster fetches sources from the reference caster on demand and serves them t
 Declare the NEAR base in the local sourcetable (see the default configuration). Set its "virtual" field (field 12) to "1".
 
 When a client connects to this base and sends its location in $G*GGA NMEA lines, the caster serves the nearest base from the general sourcetable. This sourcetable includes local and proxy sources. As the client moves, the caster switches to a new nearest base over time.
+
+## Satellite & Antenna Info (rtcm-go Sidecar)
+
+The sidecar connects to every mountpoint on the caster as a normal NTRIP client, decodes each stream, and writes satellite counts, per-constellation counts, and antenna/receiver info to the stats file at `sidecar_stats_file`. Chilopod reads this file on each `/adm/api/v1/rtcm` request and merges it into the response under a `sidecar` key, next to its own `types` and `pos` data.
+
+Verify it's working:
+
+```sh
+curl "http://localhost:2101/adm/api/v1/rtcm?user=admin&password=admin"
+```
+
+When a mountpoint has live data, its entry gets a `"sidecar"` object:
+
+```json
+{
+  "MOUNT1": {
+    "types": "1005,1008,1077,...",
+    "pos": { "lat": 41.5, "lon": -81.5 },
+    "sidecar": {
+      "connected": true,
+      "constellations": { "GPS": 8, "GLONASS": 7, "Galileo": 7 },
+      "satellite_count": 22,
+      "antenna_descriptor": "SEPCHOKE_B3E6   SPKE",
+      "antenna_serial": "5856",
+      "receiver_type": "SEPT POLARX5",
+      "last_updated": "2026-08-13T03:20:22Z"
+    }
+  }
+}
+```
+
+You can also open the admin UI (`/adm/ui/`) and expand the RTCM detail panel for a mountpoint on the Mountpoints page. Satellite counts, constellation counts, and antenna info appear there automatically once the sidecar has data for the mountpoint.
 
 Adding a Raw RTCM3 TCP Source
 ==============================
@@ -331,6 +423,24 @@ The key that the caster looks up in `source_auth_file` to authenticate `/adm` AP
 admin_user: admin
 ```
 
+## UI & Sidecar
+
+### `ui_dir`
+
+The directory that Chilopod serves static admin UI files from, at `GET /adm/ui/...`. This is the contents of `ui/dist` after [building the UI](#building-the-ui). If you omit this setting, Chilopod disables static file serving.
+
+```yaml
+ui_dir: /usr/local/etc/chilopod/ui
+```
+
+### `sidecar_stats_file`
+
+The path to the stats file that the [rtcm-go sidecar](#satellite--antenna-info-rtcm-go-sidecar) writes. When you set this path, Chilopod merges the satellite counts, constellation counts, and antenna info from the sidecar into `/adm/api/v1/rtcm`, and shows them in the admin UI. Chilopod resolves this path relative to the directory of `caster.yaml`, unless you give an absolute path. This path must match the sidecar's `-out` flag exactly.
+
+```yaml
+sidecar_stats_file: mountpoints.json
+```
+
 ## Proxy & Clustering
 
 ### `proxy`
@@ -475,7 +585,7 @@ curl "http://localhost:2101/adm/api/v1/net?user=admin&password=admin"
 
 ### `GET /adm/api/v1/rtcm`
 
-Returns RTCM stream statistics.
+Returns RTCM stream statistics: the message types seen for each mountpoint (`types`). It also returns the station position, if Chilopod has decoded a 1005 or 1006 message (`pos`). If you set [`sidecar_stats_file`](#sidecar_stats_file) and the [rtcm-go sidecar](#satellite--antenna-info-rtcm-go-sidecar) has data for a mountpoint, the response merges in a `sidecar` object too. This object has satellite counts, constellation counts, and antenna and receiver info. If the sidecar has data for a mountpoint but Chilopod has not decoded anything for it, the mountpoint still gets an entry. Only the `sidecar` field is filled in.
 
 ```sh
 curl "http://localhost:2101/adm/api/v1/rtcm?user=admin&password=admin"
