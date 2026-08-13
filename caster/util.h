@@ -13,6 +13,20 @@ typedef struct pos {
 	float lat, lon;
 } pos_t;
 
+// Full NMEA GGA sentence data, see NMEA 0183 GGA format.
+// nsats, hdop, diff_age and diff_station are -1 when the sentence left the field empty.
+typedef struct gga {
+	pos_t pos;
+	char time[16];		// hhmmss.ss (UTC), as received
+	int quality;		// 0=invalid 1=GPS 2=DGPS 3=PPS 4=RTK fixed 5=RTK float 6=estimated 7=manual 8=simulation
+	int nsats;		// satellites used in the fix
+	float hdop;		// horizontal dilution of precision
+	float alt;		// altitude above mean sea level, meters
+	float geoid_sep;	// geoid separation, meters
+	float diff_age;		// seconds since last differential update
+	int diff_station;	// differential reference station id
+} gga_t;
+
 typedef struct string_array {
 	int count;
 	char **ps;
@@ -59,7 +73,7 @@ char *urldecode(char *s);
 char *b64encode(const char *str, size_t len, int add_nul);
 char *b64decode(char *str, size_t len, int add_nul);
 unsigned long crc24q_hash(unsigned char *data, size_t len);
-int parse_gga(const char *line, pos_t *pos);
+int parse_gga(const char *line, gga_t *gga);
 char *host_port_str(char *host, unsigned short port);
 char *mystrdup(const char *str);
 void *strmalloc(size_t len);

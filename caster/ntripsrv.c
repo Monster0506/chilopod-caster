@@ -529,12 +529,14 @@ void ntripsrv_readcb(struct bufferevent *bev, void *arg) {
 						}
 					}
 				} else if (!strcasecmp(key, "ntrip-gga")) {
-					pos_t pos;
+					gga_t gga;
 					ntrip_log(st, LOG_EDEBUG, "Header GGA? \"%s\"", value);
-					if (parse_gga(value, &pos) >= 0) {
-						st->last_pos = pos;
+					if (parse_gga(value, &gga) >= 0) {
+						st->last_pos = gga.pos;
 						st->last_pos_valid = 1;
-						ntrip_push_pos_history(st, pos);
+						st->last_gga = gga;
+						gettimeofday(&st->last_gga_date, NULL);
+						ntrip_push_pos_history(st, gga.pos);
 					}
 				} else if (!strcasecmp(key,
 						config->trusted_http_ip_header ?
@@ -800,11 +802,13 @@ void ntripsrv_readcb(struct bufferevent *bev, void *arg) {
 				st->received_bytes += len + 2;
 			if (!line)
 				break;
-			pos_t pos;
-			if (parse_gga(line, &pos) >= 0) {
-				st->last_pos = pos;
+			gga_t gga;
+			if (parse_gga(line, &gga) >= 0) {
+				st->last_pos = gga.pos;
 				st->last_pos_valid = 1;
-				ntrip_push_pos_history(st, pos);
+				st->last_gga = gga;
+				gettimeofday(&st->last_gga_date, NULL);
+				ntrip_push_pos_history(st, gga.pos);
 				joblist_append_ntrip_locked(st->caster->joblist, st, &ntripsrv_redo_virtual_pos_limited);
 			} else
 				ntrip_log(st, LOG_DEBUG, "BAD GGA \"%s\", %zd bytes", line, len);

@@ -111,16 +111,16 @@ static int gga_test() {
 	};
 
 	for (struct ggatest *gga = ggalist; gga->gga; gga++) {
-		pos_t pos;
-		if (parse_gga(gga->gga, &pos) < 0) {
+		gga_t g;
+		if (parse_gga(gga->gga, &g) < 0) {
 			if (gga->lat != -1337.) {
 				printf("Can't parse %s\n", gga->gga);
 				fail++;
 			}
 			continue;
 		}
-		if (fabs(pos.lat-gga->lat) > 1e-6 || fabs(pos.lon-gga->lon) > 1e-6) {
-			printf("FAIL: gga from %s\n-> %f %f\n", gga->gga, pos.lat, pos.lon);
+		if (fabs(g.pos.lat-gga->lat) > 1e-6 || fabs(g.pos.lon-gga->lon) > 1e-6) {
+			printf("FAIL: gga from %s\n-> %f %f\n", gga->gga, g.pos.lat, g.pos.lon);
 			fail++;
 		}
 		putchar('.');
@@ -696,12 +696,12 @@ static void sourcetable_test(struct sourcetable *sourcetable) {
 	};
 
 	for (char **gga = ggalist; *gga; gga++) {
-		pos_t pos;
-		if (parse_gga(*gga, &pos) < 0) {
+		gga_t g;
+		if (parse_gga(*gga, &g) < 0) {
 			continue;
 		}
-		printf("sourcetable test from %s -> %.3f %.3f\n", *gga, pos.lat, pos.lon);
-		struct dist_table *s = sourcetable_find_pos(sourcetable, &pos);
+		printf("sourcetable test from %s -> %.3f %.3f\n", *gga, g.pos.lat, g.pos.lon);
+		struct dist_table *s = sourcetable_find_pos(sourcetable, &g.pos);
 		if (s == NULL) {
 			continue;
 		}
