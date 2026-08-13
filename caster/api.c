@@ -64,6 +64,23 @@ static json_object *api_ntrip_json(struct ntrip_state *st) {
 		if (st->last_pos_valid) {
 			json_object_object_add_ex(new_obj, "lat", json_object_new_double(st->last_pos.lat), JSON_C_CONSTANT_NEW);
 			json_object_object_add_ex(new_obj, "lon", json_object_new_double(st->last_pos.lon), JSON_C_CONSTANT_NEW);
+
+			gga_t *gga = &st->last_gga;
+			json_object *jgga = json_object_new_object();
+			json_object_object_add_ex(jgga, "time", json_object_new_string(gga->time), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(jgga, "quality", json_object_new_int(gga->quality), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(jgga, "alt", json_object_new_double(gga->alt), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(jgga, "geoid_sep", json_object_new_double(gga->geoid_sep), JSON_C_CONSTANT_NEW);
+			if (gga->nsats >= 0)
+				json_object_object_add_ex(jgga, "nsats", json_object_new_int(gga->nsats), JSON_C_CONSTANT_NEW);
+			if (gga->hdop >= 0)
+				json_object_object_add_ex(jgga, "hdop", json_object_new_double(gga->hdop), JSON_C_CONSTANT_NEW);
+			if (gga->diff_age >= 0)
+				json_object_object_add_ex(jgga, "diff_age", json_object_new_double(gga->diff_age), JSON_C_CONSTANT_NEW);
+			if (gga->diff_station >= 0)
+				json_object_object_add_ex(jgga, "diff_station", json_object_new_int(gga->diff_station), JSON_C_CONSTANT_NEW);
+			timeval_to_json(&st->last_gga_date, jgga, "date");
+			json_object_object_add_ex(new_obj, "gga", jgga, JSON_C_CONSTANT_NEW);
 		}
 
 		if (st->pos_history_count > 1) {
