@@ -482,6 +482,11 @@ void iso_date_from_timeval(char *iso_date, size_t iso_date_len, struct timeval *
 		snprintf(iso_date + 19, 6, ".%03luZ", t->tv_usec/1000);
 }
 
+/*
+ * Parse an RFC3339 UTC timestamp ("...SSZ" or "...SS.fffffffffZ", with 1-9
+ * fractional digits). Go's encoding/json trims trailing zeros in the
+ * fraction, so the digit count varies by caller; this accepts all of them.
+ */
 int timeval_from_iso_date(struct timeval *t, const char *iso_date) {
 	struct tm date;
 	int tv_usec = 0;
@@ -490,20 +495,28 @@ int timeval_from_iso_date(struct timeval *t, const char *iso_date) {
 
 	int len = strlen(iso_date);
 
-	if (len == 24 && iso_date[19] == '.' && iso_date[23] == 'Z') {
-		if (strptime(iso_date, "%Y-%m-%dT%H:%M:%S", &date) == NULL)
+	if (len < 20 || iso_date[len-1] != 'Z')
+		return 0;
+
+	if (strptime(iso_date, "%Y-%m-%dT%H:%M:%S", &date) == NULL)
+		return 0;
+
+	if (len == 20) {
+		/* No fractional seconds */
+	} else if (iso_date[19] == '.') {
+		int ndigits = len - 21;
+		if (ndigits < 1 || ndigits > 9)
 			return 0;
 
-		char cusec[5];
-		memcpy(cusec+1, iso_date+20, 3);
-		cusec[0] = '1';
-		cusec[4] = '\0';
-		sscanf(cusec, "%d", &tv_usec);
-		tv_usec = (tv_usec - 1000)*1000;
-
-	} else if (len == 20 && iso_date[19] == 'Z') {
-		if (strptime(iso_date, "%Y-%m-%dT%H:%M:%SZ", &date) == NULL)
-			return 0;
+		char usec_digits[7];
+		for (int i = 0; i < 6; i++) {
+			char c = (i < ndigits) ? iso_date[20+i] : '0';
+			if (i < ndigits && !isdigit((unsigned char)c))
+				return 0;
+			usec_digits[i] = c;
+		}
+		usec_digits[6] = '\0';
+		sscanf(usec_digits, "%d", &tv_usec);
 	} else
 		return 0;
 
