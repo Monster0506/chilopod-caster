@@ -9,9 +9,23 @@
   let dropping = $state(new Set());
   let dropMsg = $state('');
   let expandedGga = $state(null);
+  let nearCache = $state({});
+
+  async function loadNear(id) {
+    if (nearCache[id]) return;
+    nearCache = { ...nearCache, [id]: { loading: true } };
+    try {
+      const data = await apiGet(`near?id=${id}`);
+      nearCache = { ...nearCache, [id]: { loading: false, data } };
+    } catch (e) {
+      nearCache = { ...nearCache, [id]: { loading: false, error: e.message } };
+    }
+  }
 
   function toggleGga(id) {
-    expandedGga = expandedGga === id ? null : id;
+    const opening = expandedGga !== id;
+    expandedGga = opening ? id : null;
+    if (opening) loadNear(id);
   }
 
   function formatDist(m) {
@@ -151,6 +165,7 @@
           </tr>
           {#if expandedGga === conn.id && conn.gga}
             {@const gga = conn.gga}
+            {@const near = nearCache[conn.id]}
             <tr class="gga-detail-row">
               <td colspan="9">
                 <div class="gga-detail">
@@ -179,6 +194,29 @@
                       <div><span class="gga-label">Fix time</span> <span class="mono">{gga.time || '-'}</span></div>
                       <div><span class="gga-label">Received</span> <span class="mono">{formatAgo(gga.date)}</span></div>
                     </div>
+                  </div>
+                  <div class="gga-detail-section">
+                    <h4>NEAR candidates</h4>
+                    {#if !near || near.loading}
+                      <p class="near-status">Loading…</p>
+                    {:else if near.error}
+                      <p class="near-status">{near.error}</p>
+                    {:else if near.data.candidates.length === 0}
+                      <p class="near-status">No candidate bases within {formatDist(near.data.lookup_dist_m)}.</p>
+                    {:else}
+                      <table class="near-table">
+                        <thead><tr><th></th><th>Base</th><th>Distance</th></tr></thead>
+                        <tbody>
+                          {#each near.data.candidates as c (c.mountpoint)}
+                            <tr class:winner={c.mountpoint === near.data.assigned_base}>
+                              <td><span class="dot" style="background:{c.mountpoint === near.data.assigned_base ? '#22c55e' : '#475569'}"></span></td>
+                              <td class="mono">{c.mountpoint}</td>
+                              <td class="mono">{formatDist(c.dist_m)}</td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    {/if}
                   </div>
                 </div>
               </td>
@@ -369,6 +407,33 @@
     display: inline-block;
     width: 90px;
     color: #64748b;
+  }
+
+  .near-status {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #64748b;
+  }
+
+  .near-table {
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+
+  .near-table th {
+    text-align: left;
+    padding: 0.2rem 0.7rem 0.2rem 0;
+    color: #475569;
+    font-weight: 500;
+  }
+
+  .near-table td {
+    padding: 0.15rem 0.7rem 0.15rem 0;
+    color: #94a3b8;
+  }
+
+  .near-table tr.winner td {
+    color: #e2e8f0;
   }
 
   .empty {
