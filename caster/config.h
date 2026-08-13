@@ -286,6 +286,7 @@ struct config {
 	const char *source_auth_filename;
 	const char *blocklist_filename;
 	const char *sourcetable_filename;
+	const char *sidecar_stats_filename;
 	int sourcetable_priority;
 
 	int test_default;

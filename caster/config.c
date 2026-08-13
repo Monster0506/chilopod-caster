@@ -364,6 +364,8 @@ static const cyaml_schema_field_t top_mapping_schema[] = {
 		"blocklist_file", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config, blocklist_filename, 0, CYAML_UNLIMITED),
 	CYAML_FIELD_STRING_PTR(
 		"sourcetable_file", CYAML_FLAG_POINTER, struct config, sourcetable_filename, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_STRING_PTR(
+		"sidecar_stats_file", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config, sidecar_stats_filename, 0, CYAML_UNLIMITED),
 	CYAML_FIELD_INT(
 		"sourcetable_priority", CYAML_FLAG_OPTIONAL, struct config, sourcetable_priority),
 	CYAML_FIELD_INT(
@@ -650,6 +652,7 @@ void config_free(struct config *this) {
 	free((char *)this->source_auth_filename);
 	free((char *)this->blocklist_filename);
 	free((char *)this->sourcetable_filename);
+	free((char *)this->sidecar_stats_filename);
 	free((char *)this->log);
 	free((char *)this->access_log);
 	free((char *)this->admin_user);
