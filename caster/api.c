@@ -976,6 +976,98 @@ struct mime_content *api_edit_source_json(struct caster_state *caster, struct re
 	return mime_new(s, -1, "application/json", 1);
 }
 
+/*
+ * Diagnose NEAR base selection for a position: list candidate physical
+ * bases sorted by distance
+ */
+struct mime_content *api_near_json(struct caster_state *caster, struct request *req) {
+	struct config *config = req->st->config;
+	char *idval = (char *)hash_table_get(req->hash, "id");
+	char *latval = (char *)hash_table_get(req->hash, "lat");
+	char *lonval = (char *)hash_table_get(req->hash, "lon");
+
+	pos_t pos;
+	char *current_base = NULL;
+
+	if (idval && *idval) {
+		long long id;
+		if (sscanf(idval, "%lld", &id) != 1)
+			return api_error_json("invalid id");
+
+		struct ntrip_state *st;
+		int found = 0;
+		P_RWLOCK_RDLOCK(&caster->ntrips.lock);
+		TAILQ_FOREACH(st, &caster->ntrips.queue, nextg) {
+			if (st->id == id) {
+				bufferevent_lock(st->bev);
+				if (st->last_pos_valid) {
+					pos = st->last_pos;
+					found = 1;
+				}
+				if (st->virtual_mountpoint)
+					current_base = mystrdup(st->virtual_mountpoint);
+				bufferevent_unlock(st->bev);
+				break;
+			}
+		}
+		P_RWLOCK_UNLOCK(&caster->ntrips.lock);
+
+		if (!found) {
+			strfree(current_base);
+			return api_error_json("connection not found, or no position reported yet");
+		}
+	} else if (latval && lonval) {
+		if (sscanf(latval, "%f", &pos.lat) != 1 || sscanf(lonval, "%f", &pos.lon) != 1)
+			return api_error_json("invalid lat/lon");
+	} else
+		return api_error_json("id or lat/lon is required");
+
+	struct sourcetable *pos_sourcetable = stack_flatten_dist(caster, &caster->sourcetablestack, &pos, config->max_nearest_lookup_distance_m);
+	if (pos_sourcetable == NULL) {
+		strfree(current_base);
+		return api_error_json("could not build sourcetable");
+	}
+
+	struct dist_table *d = sourcetable_find_pos(pos_sourcetable, &pos);
+	sourcetable_decref(pos_sourcetable);
+	if (d == NULL) {
+		strfree(current_base);
+		return api_error_json("could not compute distances");
+	}
+
+	json_object *j = json_object_new_object();
+
+	json_object *jpos = json_object_new_object();
+	json_object_object_add_ex(jpos, "lat", json_object_new_double(pos.lat), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(jpos, "lon", json_object_new_double(pos.lon), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "pos", jpos, JSON_C_CONSTANT_NEW);
+
+	json_object *jcandidates = json_object_new_array_ext(d->size_dist_array);
+	for (int i = 0; i < d->size_dist_array; i++) {
+		json_object *jc = json_object_new_object();
+		json_object_object_add_ex(jc, "mountpoint", json_object_new_string(d->dist_array[i].mountpoint), JSON_C_CONSTANT_NEW);
+		json_object_object_add_ex(jc, "dist_m", json_object_new_double(d->dist_array[i].dist), JSON_C_CONSTANT_NEW);
+		json_object_object_add_ex(jc, "lat", json_object_new_double(d->dist_array[i].pos.lat), JSON_C_CONSTANT_NEW);
+		json_object_object_add_ex(jc, "lon", json_object_new_double(d->dist_array[i].pos.lon), JSON_C_CONSTANT_NEW);
+		json_object_array_add(jcandidates, jc);
+	}
+	json_object_object_add_ex(j, "candidates", jcandidates, JSON_C_CONSTANT_NEW);
+
+	const char *assigned = current_base ? current_base : (d->size_dist_array > 0 ? d->dist_array[0].mountpoint : NULL);
+	json_object_object_add_ex(j, "assigned_base", assigned ? json_object_new_string(assigned) : json_object_new_null(), JSON_C_CONSTANT_NEW);
+
+	json_object_object_add_ex(j, "hysteresis_m", json_object_new_double(config->hysteresis_m), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "lookup_dist_m", json_object_new_double(config->max_nearest_lookup_distance_m), JSON_C_CONSTANT_NEW);
+
+	strfree(current_base);
+	dist_table_free(d);
+
+	char *s = mystrdup(json_object_to_json_string(j));
+	struct mime_content *m = mime_new(s, -1, "application/json", 1);
+	json_object_put(j);
+	return m;
+}
+
 struct mime_content *api_sync_json(struct caster_state *caster, struct request *req) {
 	const char *type = json_object_get_string(json_object_object_get(req->json, "type"));
 

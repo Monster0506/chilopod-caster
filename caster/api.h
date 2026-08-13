@@ -17,5 +17,6 @@ struct mime_content *api_add_source_json(struct caster_state *caster, struct req
 struct mime_content *api_remove_source_json(struct caster_state *caster, struct request *req);
 struct mime_content *api_detect_source_json(struct caster_state *caster, struct request *req);
 struct mime_content *api_edit_source_json(struct caster_state *caster, struct request *req);
+struct mime_content *api_near_json(struct caster_state *caster, struct request *req);
 
 #endif
