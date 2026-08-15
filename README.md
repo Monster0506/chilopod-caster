@@ -532,6 +532,43 @@ rtcm_filter:
 
 The path to the IP blocklist file. This setting is optional.
 
+## Alarms
+
+### `alarms`
+
+Configures the [alarm notification system](#alarm-notifications-ruckus). Omit this block entirely to disable alarms. Each alert type below `alarms` is independently opt-in too -- an absent `station_offline`/`station_online`/`low_sv_count`/`position_drift` block means that alert never fires.
+
+```yaml
+alarms:
+  smtp:
+    host: smtp.example.com
+    port: 587                 # optional, default 587
+    tls: starttls              # required: none | starttls | smtps
+    auth_file: smtp.auth       # optional -- omit for an unauthenticated relay
+  recipients:
+    - name: Ops                # optional display name
+      email: ops@example.com
+  subject: Chilopod Alarm      # optional, default "Chilopod Alarm"
+  min_interval_minutes: 15     # optional, default 15
+  ruckus_path: /usr/local/sbin/ruckus   # optional, default shown
+
+  station_offline:
+    after_minutes: 5
+  station_online: {}
+  low_sv_count:
+    min_sats: 9
+    after_minutes: 2
+  position_drift:
+    lat_mm: 50
+    lon_mm: 50
+    alt_mm: 100
+    after_minutes: 5
+```
+
+`smtp.auth_file` follows the same `host:username:password` format as [`host_auth_file`](#host_auth_file), keeping credentials out of `caster.yaml`. Omit it entirely to send through an unauthenticated relay, for example a local Postfix or Exim in relay-only mode -- Chilopod does not require or assume any specific email provider.
+
+`ruckus_path` must point at a built [`ruckus`](#alarm-notifications-ruckus) binary. If it does not exist or fails to run, Chilopod logs the failure and records it at `GET /adm/api/v1/alarms`; it does not retry beyond what `ruckus` itself does internally.
+
 Admin API
 =========
 
