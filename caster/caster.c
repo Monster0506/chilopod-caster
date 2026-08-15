@@ -200,6 +200,7 @@ dynconfig_free_callback(struct config *config) {
  * Free all dynamic structures from the caster structure.
  */
 static void _caster_common_free(struct caster_state *this) {
+	alarms_free(this);
 	if (this->joblist != NULL) joblist_free(this->joblist);
 	if (this->livesources != NULL) livesource_table_free(this->livesources);
 	if (this->nodes != NULL) nodes_free(this->nodes);
@@ -1064,6 +1065,12 @@ int caster_main(char *config_file) {
 	}
 
 	if (caster_load(caster, 0) < 0) {
+		caster_free(caster);
+		return 1;
+	}
+
+	if (alarms_init(caster) < 0) {
+		logfmt(&caster->flog, LOG_CRIT, "Could not initialize alarms subsystem!");
 		caster_free(caster);
 		return 1;
 	}

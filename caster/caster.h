@@ -9,6 +9,7 @@
 
 #include <openssl/ssl.h>
 
+#include "alarms.h"
 #include "conf.h"
 #include "config.h"
 #include "hash.h"
@@ -105,6 +106,8 @@ struct caster_state {
 	struct evdns_base *dns_base;
 	struct hash_table *rtcm_cache;
 	P_RWLOCK_T rtcm_lock;
+
+	struct alarms_state *alarms;
 
 	// Protect access to the config pointer
 	P_RWLOCK_T configlock;
