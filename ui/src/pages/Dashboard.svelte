@@ -13,6 +13,7 @@
   let sourcetable = $state(null);
   let rtcm = $state(null);
   let logEntries = $state([]);
+  let alarmEntries = $state([]);
   let error = $state('');
   let reloading = $state(false);
   let reloadMsg = $state('');
@@ -37,6 +38,17 @@
     if (sec < 60) return sec + 's ago';
     if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
     return Math.floor(sec / 3600) + 'h ago';
+  }
+
+  const ALARM_TYPE_LABELS = {
+    station_offline: 'Offline',
+    station_online: 'Back online',
+    low_sv_count: 'Low SV count',
+    position_drift: 'Position drift',
+  };
+
+  function alarmTypeLabel(type) {
+    return ALARM_TYPE_LABELS[type] ?? type;
   }
 
   function formatDist(m) {
@@ -71,9 +83,9 @@
 
   async function fetchAll() {
     try {
-      const [netRes, livesourcesRes, memRes, tablesRes, rtcmRes, logRes] = await Promise.all([
+      const [netRes, livesourcesRes, memRes, tablesRes, rtcmRes, logRes, alarmsRes] = await Promise.all([
         apiGet('net'), apiGet('livesources'), apiGet('mem'),
-        apiGet('sourcetables'), apiGet('rtcm'), apiGet('log'),
+        apiGet('sourcetables'), apiGet('rtcm'), apiGet('log'), apiGet('alarms'),
       ]);
       error = '';
       net = netRes;
@@ -82,6 +94,7 @@
       sourcetable = tablesRes.find((t) => t.host === 'LOCAL') ?? { mountpoints: {} };
       rtcm = rtcmRes;
       logEntries = logRes.filter((e) => e.level <= 6).slice(-6).reverse();
+      alarmEntries = alarmsRes.slice(0, 6);
 
       const cc = connCounts(net);
       connHistory = pushHistory(connHistory, cc.total, CONN_WINDOW_SAMPLES);
@@ -323,11 +336,21 @@
 
       <div class="card s5">
         <p class="card-title">Alarms</p>
-        <div class="empty-state">
-          <div class="glyph">&#9888;</div>
-          <div class="msg">Coming soon</div>
-          <div class="sub">Alarm system not implemented yet</div>
-        </div>
+        {#if alarmEntries.length === 0}
+          <p class="stat-sub">No alarms yet.</p>
+        {:else}
+          {#each alarmEntries as a, i (a.time + i)}
+            <div class="list-row alarm-row">
+              <span class="dot" class:good={a.sent} class:bad={!a.sent}></span>
+              <span class="t">{formatAgo(a.time)}</span>
+              <span class="alarm-body">
+                <span class="alarm-mp mono">{a.mountpoint}</span>
+                <span class="alarm-type">{alarmTypeLabel(a.type)}</span>
+                {#if !a.sent}<span class="alarm-fail">send failed</span>{/if}
+              </span>
+            </div>
+          {/each}
+        {/if}
       </div>
 
       <div class="card s7">
@@ -552,6 +575,7 @@
   .dot.good { background: #22c55e; box-shadow: 0 0 0 2px #14301b; }
   .dot.warn { background: #d97706; box-shadow: 0 0 0 2px #3a2a0f; }
   .dot.off { background: #475569; }
+  .dot.bad { background: #ef4444; box-shadow: 0 0 0 2px #3a1414; }
 
   .chip-row {
     display: flex;
@@ -613,21 +637,6 @@
     padding: 0.6rem 0;
   }
 
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    gap: 0.4rem;
-    padding: 1.6rem 1rem;
-    color: #475569;
-    min-height: 96px;
-  }
-  .empty-state .glyph { font-size: 1.3rem; opacity: 0.6; }
-  .empty-state .msg { font-size: 0.82rem; color: #64748b; }
-  .empty-state .sub { font-size: 0.72rem; }
-
   .list-row {
     display: flex;
     align-items: center;
@@ -645,6 +654,20 @@
     width: 3.8rem;
     flex-shrink: 0;
   }
+
+  .alarm-row .t { width: 3.2rem; }
+  .alarm-body {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .alarm-mp { color: #e2e8f0; flex-shrink: 0; }
+  .alarm-type { color: #94a3b8; }
+  .alarm-fail { color: #fca5a5; font-size: 0.72rem; }
 
   .bare-chart {
     grid-column: span 12;
