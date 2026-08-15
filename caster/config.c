@@ -101,6 +101,21 @@ static struct config_threads default_config_threads = {
 	.stacksize = 500*1024
 };
 
+static struct config_alarms default_config_alarms = {
+	.subject = "Chilopod Alarm",
+	.min_interval_minutes = 15,
+	.ruckus_path = "/usr/local/sbin/ruckus",
+	.email_template = "alarm-email.html",
+};
+
+static struct config_alarms_smtp default_config_alarms_smtp = {
+	.port = 587,
+};
+
+static struct config_alarms_low_sv default_config_alarms_low_sv = {
+	.after_minutes = 2,
+};
+
 /*
  * YAML mapping from log level to integer values
  */
@@ -138,6 +153,15 @@ static const cyaml_strval_t facility_strings[] = {
 static const cyaml_strval_t rtcm_conversion_strings[] = {
 	{ "msm7_3", RTCM_CONV_MSM7_3 },
 	{ "msm7_4", RTCM_CONV_MSM7_4 }
+};
+
+/*
+ * YAML mapping for alarms.smtp.tls
+ */
+static const cyaml_strval_t alarms_tls_strings[] = {
+	{ "none", CONFIG_ALARMS_TLS_NONE },
+	{ "starttls", CONFIG_ALARMS_TLS_STARTTLS },
+	{ "smtps", CONFIG_ALARMS_TLS_SMTPS },
 };
 
 static const cyaml_schema_field_t bind_fields_schema[] = {
@@ -325,6 +349,83 @@ static const cyaml_schema_value_t trusted_http_proxy_schema = {
 	CYAML_VALUE_STRING(CYAML_FLAG_POINTER, const char *, 0, CYAML_UNLIMITED)
 };
 
+static const cyaml_schema_field_t alarms_smtp_fields_schema[] = {
+	CYAML_FIELD_STRING_PTR(
+		"host", CYAML_FLAG_POINTER, struct config_alarms_smtp, host, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_INT(
+		"port", CYAML_FLAG_OPTIONAL, struct config_alarms_smtp, port),
+	CYAML_FIELD_ENUM(
+			"tls", CYAML_FLAG_DEFAULT, struct config_alarms_smtp,
+			tls, alarms_tls_strings, CYAML_ARRAY_LEN(alarms_tls_strings)),
+	CYAML_FIELD_STRING_PTR(
+		"auth_file", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config_alarms_smtp, auth_file, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_END
+};
+
+static const cyaml_schema_field_t alarms_recipient_fields_schema[] = {
+	CYAML_FIELD_STRING_PTR(
+		"name", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config_alarms_recipient, name, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_STRING_PTR(
+		"email", CYAML_FLAG_POINTER, struct config_alarms_recipient, email, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_END
+};
+
+static const cyaml_schema_value_t alarms_recipient_schema = {
+	CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT,
+		struct config_alarms_recipient, alarms_recipient_fields_schema),
+};
+
+static const cyaml_schema_field_t alarms_threshold_fields_schema[] = {
+	CYAML_FIELD_INT(
+		"after_minutes", CYAML_FLAG_OPTIONAL, struct config_alarms_threshold, after_minutes),
+	CYAML_FIELD_END
+};
+
+static const cyaml_schema_field_t alarms_low_sv_fields_schema[] = {
+	CYAML_FIELD_INT(
+		"min_sats", CYAML_FLAG_DEFAULT, struct config_alarms_low_sv, min_sats),
+	CYAML_FIELD_INT(
+		"after_minutes", CYAML_FLAG_OPTIONAL, struct config_alarms_low_sv, after_minutes),
+	CYAML_FIELD_END
+};
+
+static const cyaml_schema_field_t alarms_position_drift_fields_schema[] = {
+	CYAML_FIELD_INT(
+		"lat_mm", CYAML_FLAG_OPTIONAL, struct config_alarms_position_drift, lat_mm),
+	CYAML_FIELD_INT(
+		"lon_mm", CYAML_FLAG_OPTIONAL, struct config_alarms_position_drift, lon_mm),
+	CYAML_FIELD_INT(
+		"alt_mm", CYAML_FLAG_OPTIONAL, struct config_alarms_position_drift, alt_mm),
+	CYAML_FIELD_INT(
+		"after_minutes", CYAML_FLAG_OPTIONAL, struct config_alarms_position_drift, after_minutes),
+	CYAML_FIELD_END
+};
+
+static const cyaml_schema_field_t alarms_fields_schema[] = {
+	CYAML_FIELD_MAPPING_PTR(
+		"smtp", CYAML_FLAG_DEFAULT, struct config_alarms, smtp, alarms_smtp_fields_schema),
+	CYAML_FIELD_SEQUENCE(
+		"recipients", CYAML_FLAG_POINTER,
+		struct config_alarms, recipients, &alarms_recipient_schema, 1, CYAML_UNLIMITED),
+	CYAML_FIELD_STRING_PTR(
+		"subject", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config_alarms, subject, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_INT(
+		"min_interval_minutes", CYAML_FLAG_OPTIONAL, struct config_alarms, min_interval_minutes),
+	CYAML_FIELD_STRING_PTR(
+		"ruckus_path", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config_alarms, ruckus_path, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_STRING_PTR(
+		"email_template", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config_alarms, email_template, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_MAPPING_PTR(
+		"station_offline", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config_alarms, station_offline, alarms_threshold_fields_schema),
+	CYAML_FIELD_MAPPING_PTR(
+		"station_online", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config_alarms, station_online, alarms_threshold_fields_schema),
+	CYAML_FIELD_MAPPING_PTR(
+		"low_sv_count", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config_alarms, low_sv_count, alarms_low_sv_fields_schema),
+	CYAML_FIELD_MAPPING_PTR(
+		"position_drift", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config_alarms, position_drift, alarms_position_drift_fields_schema),
+	CYAML_FIELD_END
+};
+
 /* CYAML mapping schema fields array for the top level mapping. */
 static const cyaml_schema_field_t top_mapping_schema[] = {
 	CYAML_FIELD_SEQUENCE(
@@ -415,6 +516,8 @@ static const cyaml_schema_field_t top_mapping_schema[] = {
 	CYAML_FIELD_SEQUENCE(
 		"rtcm_filter", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL,
 		struct config, rtcm_filter, &rtcm_filter_schema, 0, 1),
+	CYAML_FIELD_MAPPING_PTR(
+		"alarms", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config, alarms, alarms_fields_schema),
 	CYAML_FIELD_END
 };
 
@@ -558,6 +661,26 @@ struct config *config_parse(const char *filename, long long config_gen) {
 			return NULL;
 		}
 
+	if (this->alarms) {
+		if (!this->alarms->subject)
+			this->alarms->subject = mystrdup(default_config_alarms.subject);
+		if (!this->alarms->min_interval_minutes)
+			this->alarms->min_interval_minutes = default_config_alarms.min_interval_minutes;
+		if (!this->alarms->ruckus_path)
+			this->alarms->ruckus_path = mystrdup(default_config_alarms.ruckus_path);
+		if (!this->alarms->email_template)
+			this->alarms->email_template = mystrdup(default_config_alarms.email_template);
+		if (!this->alarms->smtp->port)
+			this->alarms->smtp->port = default_config_alarms_smtp.port;
+		if (this->alarms->low_sv_count && !this->alarms->low_sv_count->after_minutes)
+			this->alarms->low_sv_count->after_minutes = default_config_alarms_low_sv.after_minutes;
+
+		if (!this->alarms->subject || !this->alarms->ruckus_path || !this->alarms->email_template) {
+			config_free(this);
+			return NULL;
+		}
+	}
+
 	if (this->threads_count == 0) {
 		this->threads = (struct config_threads *)malloc(sizeof(struct config_threads));
 		if (this->threads == NULL) {
@@ -643,6 +766,27 @@ void config_free(struct config *this) {
 	free(this->trusted_http_proxy_prefixes);
 
 	free(this->threads);
+
+	if (this->alarms) {
+		if (this->alarms->smtp) {
+			free((char *)this->alarms->smtp->host);
+			free((char *)this->alarms->smtp->auth_file);
+			free(this->alarms->smtp);
+		}
+		for (int i = 0; i < this->alarms->recipients_count; i++) {
+			free((char *)this->alarms->recipients[i].name);
+			free((char *)this->alarms->recipients[i].email);
+		}
+		free(this->alarms->recipients);
+		free((char *)this->alarms->subject);
+		free((char *)this->alarms->ruckus_path);
+		free((char *)this->alarms->email_template);
+		free(this->alarms->station_offline);
+		free(this->alarms->station_online);
+		free(this->alarms->low_sv_count);
+		free(this->alarms->position_drift);
+		free(this->alarms);
+	}
 
 	free((char *)this->trusted_http_proxy);
 	free((char *)this->trusted_http_ip_header);
