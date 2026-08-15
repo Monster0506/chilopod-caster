@@ -215,7 +215,7 @@ systemctl enable --now caster
 How Chilopod Works
 ===================
 
-A single running caster can fulfill 3 roles simultaneously, all configured from the same `caster.yaml`. Alongside these, the sidecar adds satellite and antenna info to the caster's own decoding.
+A single running caster can fulfill 3 roles simultaneously, all configured from the same `caster.yaml`. Alongside these, the sidecar adds satellite and antenna info to the caster's own decoding, and `ruckus` sends alarm notification emails.
 
 ## Regular NTRIP caster
 
@@ -272,6 +272,19 @@ When a mountpoint has live data, its entry gets a `"sidecar"` object:
 ```
 
 You can also open the admin UI (`/adm/ui/`) and expand the RTCM detail panel for a mountpoint on the Mountpoints page. Satellite counts, constellation counts, and antenna info appear there automatically once the sidecar has data for the mountpoint.
+
+## Alarm Notifications (ruckus)
+
+Chilopod can watch its own local mountpoints for four conditions and email an operator when one crosses a threshold, using the [ruckus](https://github.com/Monster0506/Ruckus) helper binary (bundled as a submodule -- see [Building](#building)). A background check runs every 30 seconds. Configure the [`alarms`](#alarms) block to turn this on; each condition below is independently opt-in.
+
+- **`station_offline`** -- a local, non-virtual mountpoint has had no live source connection for at least `after_minutes`. Re-alerts every `min_interval_minutes` while it stays down; this is not a one-shot.
+- **`station_online`** -- the reverse transition: a mountpoint that was tracked offline gets a live connection again. Fires immediately on that transition, with no duration threshold.
+- **`low_sv_count`** -- the [sidecar](#satellite--antenna-info-rtcm-go-sidecar)'s reported satellite count for a mountpoint stays below `min_sats` for at least `after_minutes`. Resets silently, with no separate "recovered" email, once the count is back at or above `min_sats`.
+- **`position_drift`** -- the running average distance between a mountpoint's live-decoded RTCM position and its declared sourcetable position exceeds `lat_mm` or `lon_mm` (checked in that order), or its altitude drifts more than `alt_mm` from its own first observed value, for at least `after_minutes`. The NTRIP `STR` format has no declared height field, so altitude compares against a self-baseline instead of a declared value. Resets silently once back under threshold.
+
+Every alert type shares one rate limit: the first email for a given mountpoint and condition sends immediately, but a repeat for the same still-ongoing condition waits at least `min_interval_minutes` since the last send before sending again. Rovers never trigger anything -- all four conditions apply to base stations only.
+
+Chilopod spawns `ruckus` as a one-shot subprocess per alert and never blocks on it. Recent outcomes -- sent or failed, with `ruckus`'s own error text on failure -- are available at [`GET /adm/api/v1/alarms`](#get-admapiv1alarms), and on the admin UI's Dashboard.
 
 Adding a Raw RTCM3 TCP Source
 ==============================
@@ -584,6 +597,7 @@ All admin routes are under `/adm/`. The caster serves them on the port or ports 
 | GET | `/adm/api/v1/nodes` | Cluster node status |
 | GET | `/adm/api/v1/livesources` | Active live sources |
 | GET | `/adm/api/v1/sourcetables` | Merged sourcetable |
+| GET | `/adm/api/v1/alarms` | Recent alarm outcomes, most-recent-first |
 | POST | `/adm/api/v1/reload` | Reload configuration from disk |
 | POST | `/adm/api/v1/drop` | Drop a connection by ID |
 | POST | `/adm/api/v1/sources` | Add a mountpoint (writes source_auth_file + sourcetable_file, reloads) |
@@ -655,6 +669,14 @@ Returns the merged sourcetable (local + proxied sources).
 
 ```sh
 curl "http://localhost:2101/adm/api/v1/sourcetables?user=admin&password=admin"
+```
+
+### `GET /adm/api/v1/alarms`
+
+Returns recent [alarm](#alarm-notifications-ruckus) outcomes, most-recent-first, up to the last 200. Each entry has `mountpoint`, `type` (one of `station_offline`, `station_online`, `low_sv_count`, `position_drift`), `summary`, `sent` (`true`/`false`), `exit_code`, `time`, and an `error` field when `sent` is `false`.
+
+```sh
+curl "http://localhost:2101/adm/api/v1/alarms?user=admin&password=admin"
 ```
 
 ### `POST /adm/api/v1/reload`
