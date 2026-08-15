@@ -1,0 +1,29 @@
+{
+  "mountpoints": {
+    "BASE1": {
+      "connected": true,
+      "satellite_count": 14,
+      "constellations": {"GPS": 14},
+      "last_updated": "2026-08-14T17:33:25Z"
+    },
+    "BASE2": {
+      "connected": true,
+      "satellite_count": 12,
+      "constellations": {"GPS": 12},
+      "last_updated": "2026-08-14T17:33:25Z"
+    },
+    "BASE3": {
+      "connected": true,
+      "satellite_count": 12,
+      "constellations": {"GPS": 12},
+      "last_updated": "2026-08-14T17:33:25Z"
+    },
+    "BASE4": {
+      "connected": true,
+      "satellite_count": 15,
+      "constellations": {"GPS": 15},
+      "last_updated": "2026-08-14T17:33:25Z"
+    }
+  },
+  "type_names": {}
+}

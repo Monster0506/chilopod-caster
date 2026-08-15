@@ -1,0 +1,5 @@
+STR;BASE1;Base 1 - Cleveland;RTCM3;1005;0;GPS;NONE;NONE;41.4993;-81.6944;0;0;alarmtest;none;N;N;0;
+STR;BASE2;Base 2 - Akron;RTCM3;1005;0;GPS;NONE;NONE;41.0814;-81.5190;0;0;alarmtest;none;N;N;0;
+STR;BASE3;Base 3 - Youngstown;RTCM3;1005;0;GPS;NONE;NONE;41.0998;-80.6495;0;0;alarmtest;none;N;N;0;
+STR;BASE4;Base 4 - Warren;RTCM3;1005;0;GPS;NONE;NONE;41.2378;-80.8187;0;0;alarmtest;none;N;N;0;
+STR;ANEAR;Alarmtest NEAR base;RTCM3;1005;0;GPS;NONE;NONE;41.2;-81.2;1;0;alarmtest;none;N;N;0;

@@ -28,3 +28,26 @@ admin_user:	admin
 ui_dir: /mnt/c/Users/TJ/Documents/Code/github/chilopod-caster/ui/dist
 hysteresis_m:	500
 sourcetable_priority:	90
+
+alarms:
+  smtp:
+    host: smtp.gmail.com
+    port: 587
+    tls: starttls
+    auth_file: smtp.auth
+  recipients:
+    - name: TJ
+      email: tjraklovits@gmail.com
+  min_interval_minutes: 15
+  ruckus_path: /usr/local/sbin/ruckus
+  station_offline:
+    after_minutes: 5
+  station_online: {}
+  low_sv_count:
+    min_sats: 9
+    after_minutes: 2
+  position_drift:
+    lat_mm: 50
+    lon_mm: 50
+    alt_mm: 100
+    after_minutes: 5
