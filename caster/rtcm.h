@@ -40,6 +40,12 @@ struct rtcm_info {
 	struct rtcm_typeset typeset;
 	struct packet *copy1005, *copy1006;
 	struct timeval date1005, date1006, posdate;
+
+	int drift_samples;
+	int has_lat_lon_drift;		// 1 once at least one sample had a declared position to compare against
+	double avg_lat_drift_mm, avg_lon_drift_mm, avg_alt_drift_mm;
+	int has_baseline_alt;
+	double baseline_alt;
 };
 
 /*
@@ -65,6 +71,7 @@ struct rtcm_info *rtcm_info_new();
 static inline REFCNT_INCREF_BODY(rtcm_info_incref, struct rtcm_info);
 REFCNT_DECREF_DECL(rtcm_info_decref, struct rtcm_info);
 struct packet *rtcm_info_pos_packet(struct rtcm_info *this, struct caster_state *caster);
+void rtcm_info_update_drift(struct rtcm_info *this, pos_t *declared_pos);
 json_object *rtcm_info_json(struct rtcm_info *this);
 int rtcm_info_get_pos(struct rtcm_info *this, pos_t *pos);
 char *rtcm_info_get_nav_system(struct rtcm_info *this);

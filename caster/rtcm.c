@@ -9,6 +9,8 @@
 #include "bitfield.h"
 #include "ntrip_common.h"
 #include "rtcm.h"
+#include "sourceline.h"
+#include "sourcetable.h"
 
 /*
  * RTCM handling module.
@@ -614,6 +616,13 @@ struct rtcm_info *rtcm_info_new() {
 	memset(&this->date1006, 0, sizeof(this->date1006));
 	this->copy1005 = NULL;
 	this->copy1006 = NULL;
+	this->drift_samples = 0;
+	this->has_lat_lon_drift = 0;
+	this->avg_lat_drift_mm = 0;
+	this->avg_lon_drift_mm = 0;
+	this->avg_alt_drift_mm = 0;
+	this->has_baseline_alt = 0;
+	this->baseline_alt = 0;
 	REFCNT_INIT(this);
 	return this;
 }
@@ -753,6 +762,17 @@ json_object *rtcm_info_json(struct rtcm_info *this) {
 		json_object_object_add_ex(j, "pos", jpos, JSON_C_CONSTANT_NEW);
 		timeval_to_json(&this->posdate, jpos, "date");
 	}
+	if (this->has_lat_lon_drift || this->has_baseline_alt) {
+		json_object *jdrift = json_object_new_object();
+		if (this->has_lat_lon_drift) {
+			json_object_object_add_ex(jdrift, "lat_mm", json_object_new_double(this->avg_lat_drift_mm), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(jdrift, "lon_mm", json_object_new_double(this->avg_lon_drift_mm), JSON_C_CONSTANT_NEW);
+		}
+		if (this->has_baseline_alt)
+			json_object_object_add_ex(jdrift, "alt_mm", json_object_new_double(this->avg_alt_drift_mm), JSON_C_CONSTANT_NEW);
+		json_object_object_add_ex(jdrift, "samples", json_object_new_int(this->drift_samples), JSON_C_CONSTANT_NEW);
+		json_object_object_add_ex(j, "drift", jdrift, JSON_C_CONSTANT_NEW);
+	}
 	return j;
 }
 
@@ -766,6 +786,45 @@ int rtcm_info_get_pos(struct rtcm_info *this, pos_t *pos) {
 	double alt;
 	ecef_to_lat_lon(pos, &alt, this->x, this->y, this->z);
 	return 1;
+}
+
+/* Meters per degree of latitude, WGS84 -- effectively constant with latitude */
+#define METERS_PER_DEG_LAT	111320.0
+
+/*
+ * Update the running position-drift average from the position
+ * just decoded from a 1005/1006 message.
+ *
+ * Required lock: caster->rtcm_lock.
+ */
+void rtcm_info_update_drift(struct rtcm_info *this, pos_t *declared_pos) {
+	pos_t observed;
+	double alt;
+
+	if (!rtcm_typeset_check(&this->typeset, 1005) && !rtcm_typeset_check(&this->typeset, 1006))
+		return;
+	ecef_to_lat_lon(&observed, &alt, this->x, this->y, this->z);
+
+	if (declared_pos) {
+		double lat_diff_mm = (observed.lat - declared_pos->lat) * METERS_PER_DEG_LAT * 1000;
+		double lon_diff_mm = (observed.lon - declared_pos->lon) * METERS_PER_DEG_LAT
+			* cos(declared_pos->lat * M_PI / 180) * 1000;
+		int n = this->has_lat_lon_drift ? this->drift_samples + 1 : 1;
+
+		this->avg_lat_drift_mm += (fabs(lat_diff_mm) - this->avg_lat_drift_mm) / n;
+		this->avg_lon_drift_mm += (fabs(lon_diff_mm) - this->avg_lon_drift_mm) / n;
+		this->has_lat_lon_drift = 1;
+	}
+
+	if (!this->has_baseline_alt) {
+		this->baseline_alt = alt;
+		this->has_baseline_alt = 1;
+	} else {
+		double alt_diff_mm = (alt - this->baseline_alt) * 1000;
+		this->avg_alt_drift_mm += (fabs(alt_diff_mm) - this->avg_alt_drift_mm) / (this->drift_samples + 1);
+	}
+
+	this->drift_samples++;
 }
 
 static int rtcm_typeset_check_range(struct rtcm_typeset *this, int lo, int hi) {
@@ -833,8 +892,18 @@ static void rtcm_handler_pos(struct ntrip_state *st, struct packet *p, void *arg
 
 	unsigned short type = rtcm_get_type(p);
 
+	pos_t declared_pos;
+	pos_t *declared_pos_ptr = NULL;
+	struct sourceline *sl = stack_find_local_mountpoint(st->caster, &st->caster->sourcetablestack, st->mountpoint);
+	if (sl) {
+		declared_pos = sl->pos;
+		declared_pos_ptr = &declared_pos;
+		sourceline_decref(sl);
+	}
+
 	P_RWLOCK_WRLOCK(&st->caster->rtcm_lock);
 	handle_1005_1006(rp, type, p);
+	rtcm_info_update_drift(rp, declared_pos_ptr);
 	P_RWLOCK_UNLOCK(&st->caster->rtcm_lock);
 }
 
