@@ -1,3 +1,6 @@
 [submodule "rtcm-go"]
 	path = rtcm-go
 	url = https://github.com/Monster0506/rtcm-go
+[submodule "ruckus"]
+	path = ruckus
+	url = https://github.com/Monster0506/Ruckus.git
