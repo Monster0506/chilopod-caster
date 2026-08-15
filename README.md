@@ -93,6 +93,14 @@ go build -o sidecar ./cmd/sidecar
 cd ..
 ```
 
+To send alarm notification emails, build `ruckus` from [Ruckus](https://github.com/Monster0506/Ruckus), bundled in this repository as a submodule at `ruckus/`. The same `git submodule update --init --recursive` above fetches it too. Then build it:
+
+```sh
+cd ruckus
+go build -o ruckus .
+cd ..
+```
+
 Building the UI
 ===============
 
