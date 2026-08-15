@@ -147,6 +147,70 @@ struct config_rtcm_filter {
 	int convert_count;
 };
 
+/*
+ * Alarm notification email, sent through the "ruckus" helper binary.
+ */
+enum config_alarms_tls {
+	CONFIG_ALARMS_TLS_NONE = 0,
+	CONFIG_ALARMS_TLS_STARTTLS = 1,
+	CONFIG_ALARMS_TLS_SMTPS = 2,
+};
+
+struct config_alarms_smtp {
+	const char *host;
+	unsigned short port;
+	int tls;			// enum config_alarms_tls
+
+	const char *auth_file;
+};
+
+struct config_alarms_recipient {
+	const char *name;	// optional, display name
+	const char *email;
+};
+
+/* Threshold shared by station_offline / station_online */
+struct config_alarms_threshold {
+	int after_minutes;
+};
+
+struct config_alarms_low_sv {
+	int min_sats;
+	int after_minutes;
+};
+
+/*
+ * Position drift thresholds. lat_mm/lon_mm compare against the
+ * sourcetable's declared position; alt_mm has no declared counterpart in the
+ * NTRIP STR format, so it self-baselines against the first observed
+ * altitude instead
+ */
+struct config_alarms_position_drift {
+	int lat_mm;
+	int lon_mm;
+	int alt_mm;
+	int after_minutes;
+};
+
+struct config_alarms {
+	struct config_alarms_smtp *smtp;
+	struct config_alarms_recipient *recipients;
+	int recipients_count;
+
+	const char *subject;
+	int min_interval_minutes;	// rate limit: don't send more than once every N minutes
+	const char *ruckus_path;	// path to the ruckus binary
+	const char *email_template;	// path to the HTML email template, {{PLACEHOLDER}} format
+
+	/*
+	 * Presence of each pointer below is what enables that alarm type
+	 */
+	struct config_alarms_threshold *station_offline;
+	struct config_alarms_threshold *station_online;
+	struct config_alarms_low_sv *low_sv_count;
+	struct config_alarms_position_drift *position_drift;
+};
+
 struct config {
 	/*
 	 * Hysteresis distance in meters for virtual source switch.
@@ -320,6 +384,9 @@ struct config {
 
 	/* Directory to serve static UI files from (GET /adm/ui/...) */
 	const char *ui_dir;
+
+	/* Alarm notification config, NULL if the "alarms" block is absent */
+	struct config_alarms *alarms;
 
 	REFCNT;
 
