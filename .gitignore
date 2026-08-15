@@ -17,3 +17,6 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
+
+smtp.auth
+tests/testconfig/smtp.auth
