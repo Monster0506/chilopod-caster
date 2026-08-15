@@ -16,7 +16,7 @@ if ! id caster >/dev/null 2>&1; then
 	useradd --system --no-create-home --shell /usr/sbin/nologin caster
 fi
 
-if [ ! -e rtcm-go/cmd/sidecar ]; then
+if [ ! -e rtcm-go/cmd/sidecar ] || [ ! -e ruckus/main.go ]; then
 	git submodule update --init --recursive
 fi
 
@@ -24,6 +24,7 @@ mkdir -p "$DEST_DIR"
 
 (cd caster && make clean all install DEST_DIR="$DEST_DIR/")
 (cd rtcm-go && go build -o "$DEST_DIR/sidecar" ./cmd/sidecar)
+(cd ruckus && go build -o "$DEST_DIR/ruckus" .)
 install -m 0755 sample-config/chilopod-run.sh "$DEST_DIR/chilopod-run.sh"
 
 mkdir -p "$CONF_DIR" "$LOG_DIR" "$CONF_DIR/ui"
