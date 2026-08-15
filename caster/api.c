@@ -5,6 +5,7 @@
 
 #include <json-c/json_object.h>
 
+#include "alarms.h"
 #include "conf.h"
 #include "livesource.h"
 #include "nodes.h"
@@ -1062,6 +1063,17 @@ struct mime_content *api_near_json(struct caster_state *caster, struct request *
 	strfree(current_base);
 	dist_table_free(d);
 
+	char *s = mystrdup(json_object_to_json_string(j));
+	struct mime_content *m = mime_new(s, -1, "application/json", 1);
+	json_object_put(j);
+	return m;
+}
+
+/*
+ * Recent alarm outcomes, most-recent-first.
+ */
+struct mime_content *api_alarms_json(struct caster_state *caster, struct request *req) {
+	json_object *j = alarms_ring_json(caster);
 	char *s = mystrdup(json_object_to_json_string(j));
 	struct mime_content *m = mime_new(s, -1, "application/json", 1);
 	json_object_put(j);
