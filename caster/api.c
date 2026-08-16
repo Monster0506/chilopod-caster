@@ -1,11 +1,11 @@
 #include <netinet/tcp.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include <json-c/json_object.h>
-#include <yaml.h>
 
 #include "alarms.h"
 #include "conf.h"
@@ -474,564 +474,76 @@ static int remove_matching_lines(const char *dir, const char *filename, char sep
 }
 
 /*
- * Rewrite the value of a top-level "key: value" scalar line in a YAML file
- * (matched at the start of a line, unindented), preserving every other line
- * including comments, and any trailing inline "# comment" on the matched
- * line itself. Appends a new "key: value" line at the end if the key isn't
- * present (e.g. an optional field using its compiled-in default).
- * Returns 1 if a line was replaced, 0 if appended, -1 on I/O error.
+ * Rewrite one sep-delimited field (by index) of the line whose field 0
+ * equals key, in a colon-file like rover.auth. Returns 1 if updated, 0 if
+ * no line matched key, -1 on I/O error.
  */
-static int set_yaml_scalar(const char *path, const char *key, const char *value) {
-	FILE *in = fopen(path, "r");
-	if (in == NULL)
+static int set_colon_file_field(const char *dir, const char *filename, char sep, const char *key, int target_field, const char *new_value) {
+	char *path = joinpath(dir, filename);
+	if (path == NULL)
 		return -1;
+
+	FILE *in = fopen(path, "r");
+	if (in == NULL) { strfree(path); return -1; }
 
 	size_t tmp_len = strlen(path) + 5;
 	char *tmp_path = (char *)strmalloc(tmp_len);
 	snprintf(tmp_path, tmp_len, "%s.tmp", path);
 	FILE *out = fopen(tmp_path, "w");
-	if (out == NULL) {
-		fclose(in);
-		strfree(tmp_path);
-		return -1;
-	}
+	if (out == NULL) { fclose(in); strfree(path); strfree(tmp_path); return -1; }
 
 	char *line = NULL;
 	size_t linecap = 0;
 	ssize_t linelen;
-	int found = 0;
+	int updated = 0;
 	size_t klen = strlen(key);
 
 	while ((linelen = getline(&line, &linecap, in)) >= 0) {
-		if (!found && !strncmp(line, key, klen) && line[klen] == ':') {
-			char *comment = strchr(line + klen + 1, '#');
-			if (comment)
-				fprintf(out, "%s:\t%s\t%s", key, value, comment);
-			else
-				fprintf(out, "%s:\t%s\n", key, value);
-			found = 1;
-		} else {
-			fwrite(line, 1, linelen, out);
+		while (linelen > 0 && (line[linelen-1] == '\n' || line[linelen-1] == '\r'))
+			line[--linelen] = '\0';
+
+		char *first_sep = strchr(line, sep);
+		int is_match = !updated && first_sep && (size_t)(first_sep - line) == klen
+			&& !strncmp(line, key, klen);
+
+		if (!is_match) {
+			fprintf(out, "%s\n", line);
+			continue;
 		}
+
+		int fidx = 0;
+		char *seg_start = line;
+		for (char *p = line; ; p++) {
+			if (*p == sep || *p == '\0') {
+				if (fidx == target_field)
+					fprintf(out, "%s", new_value);
+				else
+					fwrite(seg_start, 1, p - seg_start, out);
+				if (*p == '\0')
+					break;
+				fputc(sep, out);
+				fidx++;
+				seg_start = p + 1;
+			}
+		}
+		fputc('\n', out);
+		updated = 1;
 	}
 	free(line);
-	if (!found)
-		fprintf(out, "%s:\t%s\n", key, value);
-
 	fclose(in);
 	fclose(out);
 
-	if (rename(tmp_path, path) < 0) {
-		strfree(tmp_path);
-		return -1;
-	}
-	strfree(tmp_path);
-	return found;
-}
-
-struct yaml_path_seg {
-	const char *key;
-	int index;
-};
-
-struct yaml_match_result {
-	int found;
-	size_t start, end;
-	int style_ok;
-
-	int insertable;
-	size_t insert_at;
-	size_t indent_start, indent_end;
-};
-
-static size_t yaml_line_start(const unsigned char *buf, size_t index) {
-	while (index > 0 && buf[index - 1] != '\n')
-		index--;
-	return index;
-}
-
-static size_t yaml_indent_end(const unsigned char *buf, size_t line_start) {
-	size_t i = line_start;
-	while (buf[i] == ' ' || buf[i] == '\t')
-		i++;
-	return i;
-}
-
-static int yaml_consume_node(yaml_parser_t *parser, yaml_event_t *start_ev, const unsigned char *buf,
-                              const struct yaml_path_seg *target, int target_len, int cur_len,
-                              struct yaml_match_result *res) {
-	switch (start_ev->type) {
-	case YAML_SCALAR_EVENT:
-		if (cur_len == target_len && !res->found) {
-			res->found = 1;
-			res->start = start_ev->start_mark.index;
-			res->end = start_ev->end_mark.index;
-			res->style_ok = (start_ev->data.scalar.style == YAML_PLAIN_SCALAR_STYLE);
-		}
-		yaml_event_delete(start_ev);
-		return 0;
-
-	case YAML_MAPPING_START_EVENT: {
-		yaml_event_delete(start_ev);
-		int is_target_parent = !res->found && cur_len == target_len - 1
-			&& target_len > 0 && target[target_len - 1].key;
-		size_t last_key_index = 0;
-		int have_sibling = 0;
-
-		for (;;) {
-			yaml_event_t key_ev;
-			if (!yaml_parser_parse(parser, &key_ev))
-				return -1;
-			if (key_ev.type == YAML_MAPPING_END_EVENT) {
-				size_t map_end = buf ? yaml_line_start(buf, key_ev.start_mark.index) : key_ev.start_mark.index;
-				yaml_event_delete(&key_ev);
-				if (is_target_parent && !res->found && !res->insertable && have_sibling) {
-					res->insertable = 1;
-					res->insert_at = map_end;
-					res->indent_start = yaml_line_start(buf, last_key_index);
-					res->indent_end = yaml_indent_end(buf, res->indent_start);
-				}
-				return 0;
-			}
-			if (key_ev.type != YAML_SCALAR_EVENT) {
-				yaml_event_delete(&key_ev);
-				return -1;
-			}
-			int on_path = !res->found && cur_len < target_len && target[cur_len].key
-				&& !strcmp((const char *)key_ev.data.scalar.value, target[cur_len].key);
-			last_key_index = key_ev.start_mark.index;
-			have_sibling = 1;
-			yaml_event_delete(&key_ev);
-
-			yaml_event_t val_ev;
-			if (!yaml_parser_parse(parser, &val_ev))
-				return -1;
-			if (yaml_consume_node(parser, &val_ev, buf, target, target_len,
-			                      on_path ? cur_len + 1 : target_len + 1, res) < 0)
-				return -1;
-			if (res->found)
-				return 0;
-		}
-	}
-
-	case YAML_SEQUENCE_START_EVENT:
-		yaml_event_delete(start_ev);
-		for (int idx = 0; ; idx++) {
-			yaml_event_t item_ev;
-			if (!yaml_parser_parse(parser, &item_ev))
-				return -1;
-			if (item_ev.type == YAML_SEQUENCE_END_EVENT) {
-				yaml_event_delete(&item_ev);
-				return 0;
-			}
-			int on_path = !res->found && cur_len < target_len
-				&& target[cur_len].key == NULL && target[cur_len].index == idx;
-			if (yaml_consume_node(parser, &item_ev, buf, target, target_len,
-			                      on_path ? cur_len + 1 : target_len + 1, res) < 0)
-				return -1;
-			if (res->found)
-				return 0;
-		}
-
-	default:
-		/* Anchors/aliases/tags aren't used in this config; treat as a dead end. */
-		yaml_event_delete(start_ev);
-		return 0;
-	}
-}
-
-static int set_yaml_nested_scalar(const char *path, const struct yaml_path_seg *target, int target_len, const char *value) {
-	FILE *fp = fopen(path, "rb");
-	if (fp == NULL)
-		return -1;
-	if (fseek(fp, 0, SEEK_END) < 0) { fclose(fp); return -1; }
-	long size = ftell(fp);
-	if (size <= 0 || fseek(fp, 0, SEEK_SET) < 0) { fclose(fp); return -1; }
-
-	unsigned char *buf = (unsigned char *)malloc(size);
-	if (buf == NULL) { fclose(fp); return -1; }
-	size_t n = fread(buf, 1, size, fp);
-	fclose(fp);
-	if (n != (size_t)size) { free(buf); return -1; }
-
-	yaml_parser_t parser;
-	if (!yaml_parser_initialize(&parser)) { free(buf); return -1; }
-	yaml_parser_set_input_string(&parser, buf, size);
-
-	struct yaml_match_result res = {0};
-	int err = 0;
-
-	yaml_event_t ev;
-	int seen_doc_start = 0;
-	for (;;) {
-		if (!yaml_parser_parse(&parser, &ev)) { err = 1; break; }
-		yaml_event_type_t t = ev.type;
-		yaml_event_delete(&ev);
-		if (t == YAML_DOCUMENT_START_EVENT) { seen_doc_start = 1; break; }
-		if (t == YAML_STREAM_END_EVENT) break;
-	}
-	if (!err && seen_doc_start) {
-		yaml_event_t root_ev;
-		if (!yaml_parser_parse(&parser, &root_ev))
-			err = 1;
-		else if (yaml_consume_node(&parser, &root_ev, buf, target, target_len, 0, &res) < 0)
-			err = 1;
-	}
-	yaml_parser_delete(&parser);
-
-	if (err) { free(buf); return -1; }
-	if (!res.found && !res.insertable) { free(buf); return -1; }
-	if (res.found && !res.style_ok) { free(buf); return -2; }
-
-	size_t tmp_len = strlen(path) + 5;
-	char *tmp_path = (char *)strmalloc(tmp_len);
-	snprintf(tmp_path, tmp_len, "%s.tmp", path);
-	FILE *out = fopen(tmp_path, "w");
-	if (out == NULL) { strfree(tmp_path); free(buf); return -1; }
-
-	if (res.found) {
-		fwrite(buf, 1, res.start, out);
-		fwrite(value, 1, strlen(value), out);
-		fwrite(buf + res.end, 1, (size_t)size - res.end, out);
-	} else {
-		fwrite(buf, 1, res.insert_at, out);
-		fwrite(buf + res.indent_start, 1, res.indent_end - res.indent_start, out);
-		fprintf(out, "%s: %s\n", target[target_len - 1].key, value);
-		fwrite(buf + res.insert_at, 1, (size_t)size - res.insert_at, out);
-	}
-	fclose(out);
-	free(buf);
-
-	if (rename(tmp_path, path) < 0) { strfree(tmp_path); return -1; }
-	strfree(tmp_path);
-	return 0;
-}
-
-static int yaml_skip_node(yaml_parser_t *parser, yaml_event_t *ev) {
-	struct yaml_match_result dummy = {0};
-	return yaml_consume_node(parser, ev, NULL, NULL, -1, 0, &dummy);
-}
-
-static int yaml_skip_sequence_capture_end(yaml_parser_t *parser, yaml_event_t *start_ev, size_t *out_end) {
-	yaml_event_delete(start_ev);
-	for (;;) {
-		yaml_event_t item_ev;
-		if (!yaml_parser_parse(parser, &item_ev))
-			return -1;
-		if (item_ev.type == YAML_SEQUENCE_END_EVENT) {
-			*out_end = item_ev.end_mark.index;
-			yaml_event_delete(&item_ev);
-			return 0;
-		}
-		if (yaml_skip_node(parser, &item_ev) < 0)
-			return -1;
-	}
-}
-
-struct yaml_recipients_info {
-	int item_count;
-	size_t item_start[32];		/* start of each item's "- " line */
-	size_t seq_end;			/* byte offset right after the last item */
-	size_t dash_prefix_start, dash_prefix_end;	/* e.g. "    - ", from item 0 */
-	size_t cont_indent_start, cont_indent_end;	/* e.g. "      ", from item 0's 2nd key */
-	int have_cont_indent;
-
-	int alarm_types_found;		/* want_alarm_types_idx's "alarm_types" key exists */
-	size_t alarm_types_key_line;	/* start of that key's own line */
-	size_t alarm_types_start, alarm_types_end;	/* its value's byte range, e.g. "[...]" */
-	int alarm_types_insertable;	/* key absent, but the item has other keys to anchor on */
-};
-
-static int yaml_locate_recipients(const unsigned char *buf, size_t size, int want_alarm_types_idx, struct yaml_recipients_info *info) {
-	memset(info, 0, sizeof *info);
-
-	yaml_parser_t parser;
-	if (!yaml_parser_initialize(&parser))
-		return -1;
-	yaml_parser_set_input_string(&parser, buf, size);
-
-	int err = 0, found_alarms = 0, found_recipients = 0;
-	yaml_event_t ev;
-	int seen_doc_start = 0;
-	for (;;) {
-		if (!yaml_parser_parse(&parser, &ev)) { err = 1; break; }
-		yaml_event_type_t t = ev.type;
-		yaml_event_delete(&ev);
-		if (t == YAML_DOCUMENT_START_EVENT) { seen_doc_start = 1; break; }
-		if (t == YAML_STREAM_END_EVENT) break;
-	}
-
-	if (!err && seen_doc_start) {
-		yaml_event_t root_ev;
-		if (!yaml_parser_parse(&parser, &root_ev)) {
-			err = 1;
-		} else if (root_ev.type != YAML_MAPPING_START_EVENT) {
-			if (yaml_skip_node(&parser, &root_ev) < 0) err = 1;
-		} else {
-			yaml_event_delete(&root_ev);
-			while (!err) {
-				yaml_event_t key_ev;
-				if (!yaml_parser_parse(&parser, &key_ev)) { err = 1; break; }
-				if (key_ev.type == YAML_MAPPING_END_EVENT) { yaml_event_delete(&key_ev); break; }
-				if (key_ev.type != YAML_SCALAR_EVENT) { yaml_event_delete(&key_ev); err = 1; break; }
-				int is_alarms = !found_alarms && !strcmp((const char *)key_ev.data.scalar.value, "alarms");
-				yaml_event_delete(&key_ev);
-
-				yaml_event_t val_ev;
-				if (!yaml_parser_parse(&parser, &val_ev)) { err = 1; break; }
-				if (!is_alarms || val_ev.type != YAML_MAPPING_START_EVENT) {
-					if (yaml_skip_node(&parser, &val_ev) < 0) err = 1;
-					continue;
-				}
-				found_alarms = 1;
-				yaml_event_delete(&val_ev);
-
-				while (!err) {
-					yaml_event_t akey_ev;
-					if (!yaml_parser_parse(&parser, &akey_ev)) { err = 1; break; }
-					if (akey_ev.type == YAML_MAPPING_END_EVENT) { yaml_event_delete(&akey_ev); break; }
-					if (akey_ev.type != YAML_SCALAR_EVENT) { yaml_event_delete(&akey_ev); err = 1; break; }
-					int is_recipients = !found_recipients && !strcmp((const char *)akey_ev.data.scalar.value, "recipients");
-					yaml_event_delete(&akey_ev);
-
-					yaml_event_t aval_ev;
-					if (!yaml_parser_parse(&parser, &aval_ev)) { err = 1; break; }
-					if (!is_recipients || aval_ev.type != YAML_SEQUENCE_START_EVENT) {
-						if (yaml_skip_node(&parser, &aval_ev) < 0) err = 1;
-						continue;
-					}
-					found_recipients = 1;
-					yaml_event_delete(&aval_ev);
-
-					while (!err) {
-						yaml_event_t item_ev;
-						if (!yaml_parser_parse(&parser, &item_ev)) { err = 1; break; }
-						if (item_ev.type == YAML_SEQUENCE_END_EVENT) {
-							info->seq_end = yaml_line_start(buf, item_ev.start_mark.index);
-							yaml_event_delete(&item_ev);
-							break;
-						}
-						if (item_ev.type != YAML_MAPPING_START_EVENT) {
-							if (yaml_skip_node(&parser, &item_ev) < 0) err = 1;
-							continue;
-						}
-						size_t item_line = yaml_line_start(buf, item_ev.start_mark.index);
-						if (info->item_count < 32)
-							info->item_start[info->item_count] = item_line;
-						yaml_event_delete(&item_ev);
-
-						int first_key = 1;
-						int is_target_item = (info->item_count == want_alarm_types_idx);
-						while (!err) {
-							yaml_event_t k2;
-							if (!yaml_parser_parse(&parser, &k2)) { err = 1; break; }
-							if (k2.type == YAML_MAPPING_END_EVENT) { yaml_event_delete(&k2); break; }
-							if (k2.type != YAML_SCALAR_EVENT) { yaml_event_delete(&k2); err = 1; break; }
-							int is_wanted_alarm_types = is_target_item
-								&& !strcmp((const char *)k2.data.scalar.value, "alarm_types");
-							if (is_target_item) {
-								info->alarm_types_insertable = 1;
-								if (is_wanted_alarm_types)
-									info->alarm_types_key_line = yaml_line_start(buf, k2.start_mark.index);
-							}
-							if (info->item_count == 0 && first_key) {
-								info->dash_prefix_start = item_line;
-								info->dash_prefix_end = k2.start_mark.index;
-							} else if (info->item_count == 0 && !info->have_cont_indent) {
-								size_t l = yaml_line_start(buf, k2.start_mark.index);
-								info->cont_indent_start = l;
-								info->cont_indent_end = yaml_indent_end(buf, l);
-								info->have_cont_indent = 1;
-							}
-							first_key = 0;
-							yaml_event_delete(&k2);
-
-							yaml_event_t v2;
-							if (!yaml_parser_parse(&parser, &v2)) { err = 1; break; }
-							if (is_wanted_alarm_types && v2.type == YAML_SEQUENCE_START_EVENT) {
-								info->alarm_types_found = 1;
-								info->alarm_types_start = v2.start_mark.index;
-								if (yaml_skip_sequence_capture_end(&parser, &v2, &info->alarm_types_end) < 0) { err = 1; break; }
-							} else if (yaml_skip_node(&parser, &v2) < 0) {
-								err = 1; break;
-							}
-						}
-						if (!err)
-							info->item_count++;
-					}
-				}
-			}
-		}
-	}
-
-	yaml_parser_delete(&parser);
-	if (err || !found_recipients)
-		return -1;
-	return 0;
-}
-
-static int add_yaml_recipient(const char *path, const char *name, const char *email) {
-	FILE *fp = fopen(path, "rb");
-	if (fp == NULL)
-		return -1;
-	if (fseek(fp, 0, SEEK_END) < 0) { fclose(fp); return -1; }
-	long size = ftell(fp);
-	if (size <= 0 || fseek(fp, 0, SEEK_SET) < 0) { fclose(fp); return -1; }
-	unsigned char *buf = (unsigned char *)malloc(size);
-	if (buf == NULL) { fclose(fp); return -1; }
-	size_t n = fread(buf, 1, size, fp);
-	fclose(fp);
-	if (n != (size_t)size) { free(buf); return -1; }
-
-	struct yaml_recipients_info info;
-	if (yaml_locate_recipients(buf, size, -1, &info) < 0 || info.item_count == 0) {
-		free(buf);
-		return -1;
-	}
-
-	size_t tmp_len = strlen(path) + 5;
-	char *tmp_path = (char *)strmalloc(tmp_len);
-	snprintf(tmp_path, tmp_len, "%s.tmp", path);
-	FILE *out = fopen(tmp_path, "w");
-	if (out == NULL) { strfree(tmp_path); free(buf); return -1; }
-
-	fwrite(buf, 1, info.seq_end, out);
-	fwrite(buf + info.dash_prefix_start, 1, info.dash_prefix_end - info.dash_prefix_start, out);
-	if (name && *name) {
-		fprintf(out, "name: %s\n", name);
-		if (info.have_cont_indent)
-			fwrite(buf + info.cont_indent_start, 1, info.cont_indent_end - info.cont_indent_start, out);
-		else
-			for (size_t i = 0; i < info.dash_prefix_end - info.dash_prefix_start; i++)
-				fputc(' ', out);
-		fprintf(out, "email: %s\n", email);
-	} else {
-		fprintf(out, "email: %s\n", email);
-	}
-	fwrite(buf + info.seq_end, 1, (size_t)size - info.seq_end, out);
-	fclose(out);
-	free(buf);
-
-	if (rename(tmp_path, path) < 0) { strfree(tmp_path); return -1; }
-	strfree(tmp_path);
-	return 0;
-}
-
-static int remove_yaml_recipient(const char *path, int index) {
-	FILE *fp = fopen(path, "rb");
-	if (fp == NULL)
-		return -1;
-	if (fseek(fp, 0, SEEK_END) < 0) { fclose(fp); return -1; }
-	long size = ftell(fp);
-	if (size <= 0 || fseek(fp, 0, SEEK_SET) < 0) { fclose(fp); return -1; }
-	unsigned char *buf = (unsigned char *)malloc(size);
-	if (buf == NULL) { fclose(fp); return -1; }
-	size_t n = fread(buf, 1, size, fp);
-	fclose(fp);
-	if (n != (size_t)size) { free(buf); return -1; }
-
-	struct yaml_recipients_info info;
-	if (yaml_locate_recipients(buf, size, -1, &info) < 0) { free(buf); return -1; }
-	if (index < 0 || index >= info.item_count) { free(buf); return -1; }
-	if (info.item_count <= 1) { free(buf); return -2; }
-
-	size_t item_start = info.item_start[index];
-	size_t item_end = (index + 1 < info.item_count) ? info.item_start[index + 1] : info.seq_end;
-
-	size_t tmp_len = strlen(path) + 5;
-	char *tmp_path = (char *)strmalloc(tmp_len);
-	snprintf(tmp_path, tmp_len, "%s.tmp", path);
-	FILE *out = fopen(tmp_path, "w");
-	if (out == NULL) { strfree(tmp_path); free(buf); return -1; }
-
-	fwrite(buf, 1, item_start, out);
-	fwrite(buf + item_end, 1, (size_t)size - item_end, out);
-	fclose(out);
-	free(buf);
-
-	if (rename(tmp_path, path) < 0) { strfree(tmp_path); return -1; }
-	strfree(tmp_path);
-	return 0;
-}
-
-static int set_yaml_recipient_alarm_types(const char *path, int index, const char **types, int count) {
-	FILE *fp = fopen(path, "rb");
-	if (fp == NULL)
-		return -1;
-	if (fseek(fp, 0, SEEK_END) < 0) { fclose(fp); return -1; }
-	long size = ftell(fp);
-	if (size <= 0 || fseek(fp, 0, SEEK_SET) < 0) { fclose(fp); return -1; }
-	unsigned char *buf = (unsigned char *)malloc(size);
-	if (buf == NULL) { fclose(fp); return -1; }
-	size_t n = fread(buf, 1, size, fp);
-	fclose(fp);
-	if (n != (size_t)size) { free(buf); return -1; }
-
-	struct yaml_recipients_info info;
-	if (yaml_locate_recipients(buf, size, index, &info) < 0) { free(buf); return -1; }
-	if (index < 0 || index >= info.item_count) { free(buf); return -1; }
-
-	size_t value_cap = 4;
-	for (int i = 0; i < count; i++)
-		value_cap += strlen(types[i]) + 2;
-	char *value = (char *)malloc(value_cap);
-	if (!value) { free(buf); return -1; }
-	char *p = value;
-	*p++ = '[';
-	for (int i = 0; i < count; i++) {
-		if (i) { *p++ = ','; *p++ = ' '; }
-		size_t l = strlen(types[i]);
-		memcpy(p, types[i], l);
-		p += l;
-	}
-	*p++ = ']';
-	*p = '\0';
-
-	size_t tmp_len = strlen(path) + 5;
-	char *tmp_path = (char *)strmalloc(tmp_len);
-	snprintf(tmp_path, tmp_len, "%s.tmp", path);
-	FILE *out = fopen(tmp_path, "w");
-	if (out == NULL) { strfree(tmp_path); free(value); free(buf); return -1; }
-
-	int ok = 1;
-	if (count == 0) {
-		if (info.alarm_types_found) {
-			size_t line_after = info.alarm_types_end;
-			while (line_after < (size_t)size && buf[line_after] != '\n')
-				line_after++;
-			if (line_after < (size_t)size)
-				line_after++;
-			fwrite(buf, 1, info.alarm_types_key_line, out);
-			fwrite(buf + line_after, 1, (size_t)size - line_after, out);
-		} else {
-			fwrite(buf, 1, size, out);
-		}
-	} else if (info.alarm_types_found) {
-		fwrite(buf, 1, info.alarm_types_start, out);
-		fwrite(value, 1, strlen(value), out);
-		fwrite(buf + info.alarm_types_end, 1, (size_t)size - info.alarm_types_end, out);
-	} else if (info.alarm_types_insertable) {
-		size_t insert_at = (index + 1 < info.item_count) ? info.item_start[index + 1] : info.seq_end;
-		fwrite(buf, 1, insert_at, out);
-		if (info.have_cont_indent)
-			fwrite(buf + info.cont_indent_start, 1, info.cont_indent_end - info.cont_indent_start, out);
-		fprintf(out, "alarm_types: %s\n", value);
-		fwrite(buf + insert_at, 1, (size_t)size - insert_at, out);
-	} else {
-		ok = 0;
-	}
-	fclose(out);
-	free(value);
-	free(buf);
-
-	if (!ok) {
+	if (!updated) {
 		remove(tmp_path);
+		strfree(path);
 		strfree(tmp_path);
-		return -1;
+		return 0;
 	}
-	if (rename(tmp_path, path) < 0) { strfree(tmp_path); return -1; }
+
+	int r = rename(tmp_path, path) < 0 ? -1 : 1;
+	strfree(path);
 	strfree(tmp_path);
-	return 0;
+	return r;
 }
 
 static const struct { const char *name; int level; } LOG_LEVELS[] = {
@@ -1243,6 +755,25 @@ struct mime_content *api_settings_get_json(struct caster_state *caster, struct r
 			json_object_object_add_ex(jsmtp, "tls", json_object_new_string(tls_name), JSON_C_CONSTANT_NEW);
 			json_object_object_add_ex(jsmtp, "auth_file",
 				a->smtp->auth_file ? json_object_new_string(a->smtp->auth_file) : json_object_new_null(), JSON_C_CONSTANT_NEW);
+			/*
+			 * List the auth_file's entries (host + user, never the
+			 * password) so the UI can manage them the same way it manages
+			 * rover accounts.
+			 */
+			json_object *jcreds = json_object_new_array();
+			if (a->smtp->auth_file) {
+				struct auth_entry *entries = auth_parse(caster, a->smtp->auth_file);
+				if (entries) {
+					for (struct auth_entry *e = entries; e->key; e++) {
+						json_object *jc = json_object_new_object();
+						json_object_object_add_ex(jc, "host", json_object_new_string(e->key), JSON_C_CONSTANT_NEW);
+						json_object_object_add_ex(jc, "user", json_object_new_string(e->user), JSON_C_CONSTANT_NEW);
+						json_object_array_add(jcreds, jc);
+					}
+					auth_free(entries);
+				}
+			}
+			json_object_object_add_ex(jsmtp, "credentials", jcreds, JSON_C_CONSTANT_NEW);
 			json_object_object_add_ex(ja, "smtp", jsmtp, JSON_C_CONSTANT_NEW);
 		} else {
 			json_object_object_add_ex(ja, "smtp", json_object_new_null(), JSON_C_CONSTANT_NEW);
@@ -1265,6 +796,18 @@ struct mime_content *api_settings_get_json(struct caster_state *caster, struct r
 			json_object_array_add(jrecipients, jr);
 		}
 		json_object_object_add_ex(ja, "recipients", jrecipients, JSON_C_CONSTANT_NEW);
+
+		json_object *jmountpoints = json_object_new_array();
+		for (int i = 0; i < a->mountpoints_count; i++) {
+			json_object *jm = json_object_new_object();
+			json_object_object_add_ex(jm, "mountpoint", json_object_new_string(a->mountpoints[i].mountpoint), JSON_C_CONSTANT_NEW);
+			json_object *jtypes = json_object_new_array_ext(a->mountpoints[i].alarm_types_count);
+			for (int t = 0; t < a->mountpoints[i].alarm_types_count; t++)
+				json_object_array_add(jtypes, json_object_new_string(a->mountpoints[i].alarm_types[t]));
+			json_object_object_add_ex(jm, "alarm_types", jtypes, JSON_C_CONSTANT_NEW);
+			json_object_array_add(jmountpoints, jm);
+		}
+		json_object_object_add_ex(ja, "mountpoints", jmountpoints, JSON_C_CONSTANT_NEW);
 
 		if (a->station_offline) {
 			json_object *jt = json_object_new_object();
@@ -1304,6 +847,27 @@ struct mime_content *api_settings_get_json(struct caster_state *caster, struct r
 		json_object_object_add_ex(j, "alarms", json_object_new_null(), JSON_C_CONSTANT_NEW);
 	}
 
+	/*
+	 * Rover (NTRIP GET client) accounts. Passwords are write-only -- never
+	 * echoed back, same policy as the SMTP credential and admin password.
+	 */
+	json_object *jrover = json_object_new_object();
+	json_object_object_add_ex(jrover, "configured", json_object_new_boolean(config->rover_auth_filename != NULL), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(jrover, "filename",
+		config->rover_auth_filename ? json_object_new_string(config->rover_auth_filename) : json_object_new_null(),
+		JSON_C_CONSTANT_NEW);
+	json_object *jaccounts = json_object_new_array();
+	if (config->rover_auth) {
+		for (struct rover_auth_entry *e = config->rover_auth; e->user; e++) {
+			json_object *ja2 = json_object_new_object();
+			json_object_object_add_ex(ja2, "user", json_object_new_string(e->user), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(ja2, "enabled", json_object_new_boolean(e->enabled), JSON_C_CONSTANT_NEW);
+			json_object_array_add(jaccounts, ja2);
+		}
+	}
+	json_object_object_add_ex(jrover, "accounts", jaccounts, JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "rover_auth", jrover, JSON_C_CONSTANT_NEW);
+
 	char *s = mystrdup(json_object_to_json_string(j));
 	struct mime_content *m = mime_new(s, -1, "application/json", 1);
 	json_object_put(j);
@@ -1321,238 +885,637 @@ static int is_valid_alarm_type(const char *s) {
 }
 
 
-struct mime_content *api_settings_set_json(struct caster_state *caster, struct request *req) {
-	static const char *STRING_FIELDS[] = {
-		"admin_user", "trusted_http_ip_header", "host_auth_filename",
-		"source_auth_filename", "blocklist_filename", "sourcetable_filename",
-		"sidecar_stats_filename", "access_log", "log", "ui_dir", NULL
-	};
-	static const char *INT_FIELDS[] = {
-		"idle_max_delay", "reconnect_delay", "min_raw_packet", "max_raw_packet",
-		"sourcetable_priority", "on_demand_source_timeout", "nearest_base_count_target",
-		"min_nearest_recompute_interval", "max_nearest_recompute_interval",
-		"source_read_timeout", "ntripcli_default_read_timeout", "ntripcli_default_write_timeout",
-		"ntripsrv_default_read_timeout", "ntripsrv_default_write_timeout", NULL
-	};
-	static const char *SIZE_FIELDS[] = {
-		"backlog_socket", "backlog_evbuffer", "http_header_max_size",
-		"http_content_length_max", NULL
-	};
-	static const char *FLOAT_FIELDS[] = {
-		"hysteresis_m", "max_nearest_lookup_distance_m", "min_nearest_recompute_pos_delta", NULL
-	};
+enum settings_field_type { SFT_STRING, SFT_INT, SFT_SIZE, SFT_FLOAT };
 
-#define SEG_KEY(k) { (k), -1 }
-	struct nested_field_def {
-		const char *post_key;
-		struct yaml_path_seg path[4];
-		int path_len;
-		int is_int;	
-	};
-	static const struct nested_field_def NESTED_FIELDS[] = {
-		{ "alarms.subject", { SEG_KEY("alarms"), SEG_KEY("subject") }, 2, 0 },
-		{ "alarms.min_interval_minutes", { SEG_KEY("alarms"), SEG_KEY("min_interval_minutes") }, 2, 1 },
-		{ "alarms.ruckus_path", { SEG_KEY("alarms"), SEG_KEY("ruckus_path") }, 2, 0 },
-		{ "alarms.email_template", { SEG_KEY("alarms"), SEG_KEY("email_template") }, 2, 0 },
-		{ "alarms.smtp.host", { SEG_KEY("alarms"), SEG_KEY("smtp"), SEG_KEY("host") }, 3, 0 },
-		{ "alarms.smtp.port", { SEG_KEY("alarms"), SEG_KEY("smtp"), SEG_KEY("port") }, 3, 1 },
-		{ "alarms.smtp.auth_file", { SEG_KEY("alarms"), SEG_KEY("smtp"), SEG_KEY("auth_file") }, 3, 0 },
-		{ "alarms.station_offline.after_minutes", { SEG_KEY("alarms"), SEG_KEY("station_offline"), SEG_KEY("after_minutes") }, 3, 1 },
-		{ "alarms.station_online.after_minutes", { SEG_KEY("alarms"), SEG_KEY("station_online"), SEG_KEY("after_minutes") }, 3, 1 },
-		{ "alarms.low_sv_count.min_sats", { SEG_KEY("alarms"), SEG_KEY("low_sv_count"), SEG_KEY("min_sats") }, 3, 1 },
-		{ "alarms.low_sv_count.after_minutes", { SEG_KEY("alarms"), SEG_KEY("low_sv_count"), SEG_KEY("after_minutes") }, 3, 1 },
-		{ "alarms.position_drift.lat_mm", { SEG_KEY("alarms"), SEG_KEY("position_drift"), SEG_KEY("lat_mm") }, 3, 1 },
-		{ "alarms.position_drift.lon_mm", { SEG_KEY("alarms"), SEG_KEY("position_drift"), SEG_KEY("lon_mm") }, 3, 1 },
-		{ "alarms.position_drift.alt_mm", { SEG_KEY("alarms"), SEG_KEY("position_drift"), SEG_KEY("alt_mm") }, 3, 1 },
-		{ "alarms.position_drift.after_minutes", { SEG_KEY("alarms"), SEG_KEY("position_drift"), SEG_KEY("after_minutes") }, 3, 1 },
-		{ NULL, {{0}}, 0, 0 }
-	};
-#undef SEG_KEY
+struct top_field_def {
+	const char *post_key;
+	size_t offset;
+	enum settings_field_type type;
+};
 
-	int changed = 0;
+#define TOPFIELD(key, field, ftype) { (key), offsetof(struct config, field), (ftype) }
+static const struct top_field_def TOP_FIELDS[] = {
+	TOPFIELD("admin_user", admin_user, SFT_STRING),
+	TOPFIELD("trusted_http_ip_header", trusted_http_ip_header, SFT_STRING),
+	TOPFIELD("host_auth_filename", host_auth_filename, SFT_STRING),
+	TOPFIELD("source_auth_filename", source_auth_filename, SFT_STRING),
+	TOPFIELD("rover_auth_filename", rover_auth_filename, SFT_STRING),
+	TOPFIELD("blocklist_filename", blocklist_filename, SFT_STRING),
+	TOPFIELD("sourcetable_filename", sourcetable_filename, SFT_STRING),
+	TOPFIELD("sidecar_stats_filename", sidecar_stats_filename, SFT_STRING),
+	TOPFIELD("access_log", access_log, SFT_STRING),
+	TOPFIELD("log", log, SFT_STRING),
+	TOPFIELD("ui_dir", ui_dir, SFT_STRING),
+
+	TOPFIELD("idle_max_delay", idle_max_delay, SFT_INT),
+	TOPFIELD("reconnect_delay", reconnect_delay, SFT_INT),
+	TOPFIELD("min_raw_packet", min_raw_packet, SFT_INT),
+	TOPFIELD("max_raw_packet", max_raw_packet, SFT_INT),
+	TOPFIELD("sourcetable_priority", sourcetable_priority, SFT_INT),
+	TOPFIELD("on_demand_source_timeout", on_demand_source_timeout, SFT_INT),
+	TOPFIELD("nearest_base_count_target", nearest_base_count_target, SFT_INT),
+	TOPFIELD("min_nearest_recompute_interval", min_nearest_recompute_interval, SFT_INT),
+	TOPFIELD("max_nearest_recompute_interval", max_nearest_recompute_interval, SFT_INT),
+	TOPFIELD("source_read_timeout", source_read_timeout, SFT_INT),
+	TOPFIELD("ntripcli_default_read_timeout", ntripcli_default_read_timeout, SFT_INT),
+	TOPFIELD("ntripcli_default_write_timeout", ntripcli_default_write_timeout, SFT_INT),
+	TOPFIELD("ntripsrv_default_read_timeout", ntripsrv_default_read_timeout, SFT_INT),
+	TOPFIELD("ntripsrv_default_write_timeout", ntripsrv_default_write_timeout, SFT_INT),
+
+	TOPFIELD("backlog_socket", backlog_socket, SFT_SIZE),
+	TOPFIELD("backlog_evbuffer", backlog_evbuffer, SFT_SIZE),
+	TOPFIELD("http_header_max_size", http_header_max_size, SFT_SIZE),
+	TOPFIELD("http_content_length_max", http_content_length_max, SFT_SIZE),
+
+	TOPFIELD("hysteresis_m", hysteresis_m, SFT_FLOAT),
+	TOPFIELD("max_nearest_lookup_distance_m", max_nearest_lookup_distance_m, SFT_FLOAT),
+	TOPFIELD("min_nearest_recompute_pos_delta", min_nearest_recompute_pos_delta, SFT_FLOAT),
+	{ NULL, 0, 0 }
+};
+#undef TOPFIELD
+
+/* Validate and assign value into a scalar C field. errmsg is left
+ * untouched on success. */
+static int apply_scalar_field(void *field_ptr, enum settings_field_type type, const char *value, const char **errmsg) {
 	char *end;
+	switch (type) {
+	case SFT_STRING:
+		if (!*value || !field_is_safe(value)) {
+			*errmsg = "invalid or empty value for a setting";
+			return -1;
+		}
+		free(*(char **)field_ptr);
+		*(const char **)field_ptr = strdup(value);
+		return 0;
+	case SFT_INT: {
+		long v = strtol(value, &end, 10);
+		if (end == value || *end) {
+			*errmsg = "a numeric setting is not a valid integer";
+			return -1;
+		}
+		*(int *)field_ptr = (int)v;
+		return 0;
+	}
+	case SFT_SIZE: {
+		if (value[0] == '-') {
+			*errmsg = "a size setting must be a positive integer";
+			return -1;
+		}
+		unsigned long v = strtoul(value, &end, 10);
+		if (end == value || *end || v == 0) {
+			*errmsg = "a size setting must be a positive integer";
+			return -1;
+		}
+		*(size_t *)field_ptr = (size_t)v;
+		return 0;
+	}
+	case SFT_FLOAT: {
+		double v = strtod(value, &end);
+		if (end == value || *end) {
+			*errmsg = "a numeric setting is not a valid number";
+			return -1;
+		}
+		*(float *)field_ptr = (float)v;
+		return 0;
+	}
+	}
+	return -1;
+}
+
+static int apply_string_field(const char **field, const char *value, const char **errmsg) {
+	return apply_scalar_field(field, SFT_STRING, value, errmsg);
+}
+
+static int apply_int_field(int *field, const char *value, const char **errmsg) {
+	return apply_scalar_field(field, SFT_INT, value, errmsg);
+}
+
+static struct config_alarms *ensure_alarms(struct config *edit) {
+	if (!edit->alarms)
+		edit->alarms = (struct config_alarms *)calloc(1, sizeof(struct config_alarms));
+	return edit->alarms;
+}
+
+static struct config_alarms_smtp *ensure_smtp(struct config_alarms *alarms) {
+	if (!alarms->smtp)
+		alarms->smtp = (struct config_alarms_smtp *)calloc(1, sizeof(struct config_alarms_smtp));
+	return alarms->smtp;
+}
+
+/*
+ * Parse a comma-separated list of alarm type names into a freshly
+ * allocated array of strdup'd strings. Returns -1 (leaving *out_types/
+ * *out_count untouched) if any token isn't a recognized type name.
+ */
+static int parse_alarm_types(const char *value, const char ***out_types, int *out_count) {
+	char *copy = mystrdup(value);
+	const char **types = NULL;
+	int count = 0;
+	int bad = 0;
+	if (*copy) {
+		char *tok = strtok(copy, ",");
+		while (tok) {
+			while (*tok == ' ')
+				tok++;
+			if (!is_valid_alarm_type(tok)) { bad = 1; break; }
+			const char **nt = (const char **)realloc((void *)types, (count + 1) * sizeof(*types));
+			if (!nt) { bad = 1; break; }
+			types = nt;
+			types[count++] = strdup(tok);
+			tok = strtok(NULL, ",");
+		}
+	}
+	strfree(copy);
+	if (bad) {
+		for (int j = 0; j < count; j++)
+			free((char *)types[j]);
+		free((void *)types);
+		return -1;
+	}
+	*out_types = types;
+	*out_count = count;
+	return 0;
+}
+
+struct mime_content *api_settings_set_json(struct caster_state *caster, struct request *req) {
+	struct config *config = req->st->config;
+	int changed = 0;
+	const char *errmsg = NULL;
+
+	/* rover_auth.* fields operate on the separate rover_auth_filename text
+	 * file, not on caster.yaml -- entirely independent of the struct-edit
+	 * mechanism below, so this stays on the live config exactly as before. */
+	if (config->rover_auth_filename) {
+		char *ra_add_user = (char *)hash_table_get(req->hash, "rover_auth.add.user");
+		if (ra_add_user) {
+			char *ra_add_password = (char *)hash_table_get(req->hash, "rover_auth.add.password");
+			char *ra_add_enabled = (char *)hash_table_get(req->hash, "rover_auth.add.enabled");
+			if (!*ra_add_user || !field_is_safe(ra_add_user))
+				return api_error_json("invalid or empty rover_auth.add.user");
+			if (!ra_add_password || !*ra_add_password || !field_is_safe(ra_add_password))
+				return api_error_json("invalid or empty rover_auth.add.password");
+			if (config->rover_auth && rover_auth_lookup(config->rover_auth, ra_add_user))
+				return api_error_json("that rover user already exists");
+			int enabled = !ra_add_enabled || !strcasecmp(ra_add_enabled, "Y")
+				|| !strcasecmp(ra_add_enabled, "true") || !strcmp(ra_add_enabled, "1");
+			FILE *f = fopen_absolute(caster->config_dir, config->rover_auth_filename, "a");
+			if (f == NULL)
+				return api_error_json("cannot open rover_auth_filename");
+			fprintf(f, "%s:%s:%s\n", ra_add_user, ra_add_password, enabled ? "Y" : "N");
+			fclose(f);
+			changed = 1;
+		}
+
+		char *ra_remove = (char *)hash_table_get(req->hash, "rover_auth.remove");
+		if (ra_remove) {
+			if (!field_is_safe(ra_remove))
+				return api_error_json("invalid characters in rover_auth.remove");
+			int r = remove_matching_lines(caster->config_dir, config->rover_auth_filename, ':', 0, ra_remove);
+			if (r <= 0)
+				return api_error_json(r < 0 ? "cannot rewrite rover_auth_filename" : "that rover user isn't present in the config file");
+			changed = 1;
+		}
+
+		char *ra_enable_user = (char *)hash_table_get(req->hash, "rover_auth.set_enabled.user");
+		if (ra_enable_user) {
+			char *ra_enable_value = (char *)hash_table_get(req->hash, "rover_auth.set_enabled.value");
+			if (!field_is_safe(ra_enable_user))
+				return api_error_json("invalid characters in rover_auth.set_enabled.user");
+			if (!ra_enable_value || (strcasecmp(ra_enable_value, "Y") && strcasecmp(ra_enable_value, "N")))
+				return api_error_json("rover_auth.set_enabled.value must be Y or N");
+			int r = set_colon_file_field(caster->config_dir, config->rover_auth_filename, ':', ra_enable_user, 2, ra_enable_value);
+			if (r <= 0)
+				return api_error_json(r < 0 ? "cannot rewrite rover_auth_filename" : "that rover user isn't present in the config file");
+			changed = 1;
+		}
+
+		char *ra_pw_user = (char *)hash_table_get(req->hash, "rover_auth.set_password.user");
+		if (ra_pw_user) {
+			char *ra_pw_value = (char *)hash_table_get(req->hash, "rover_auth.set_password.value");
+			if (!field_is_safe(ra_pw_user))
+				return api_error_json("invalid characters in rover_auth.set_password.user");
+			if (!ra_pw_value || !*ra_pw_value || !field_is_safe(ra_pw_value))
+				return api_error_json("invalid or empty rover_auth.set_password.value");
+			int r = set_colon_file_field(caster->config_dir, config->rover_auth_filename, ':', ra_pw_user, 1, ra_pw_value);
+			if (r <= 0)
+				return api_error_json(r < 0 ? "cannot rewrite rover_auth_filename" : "that rover user isn't present in the config file");
+			changed = 1;
+		}
+	}
+
+	/*
+	 * alarms.smtp_auth.* fields operate on the separate smtp.auth_file
+	 * text file (same host:user:password shape as source_auth/host_auth),
+	 * not on caster.yaml -- independent of the struct-edit mechanism below.
+	 */
+	if (config->alarms && config->alarms->smtp && config->alarms->smtp->auth_file) {
+		const char *smtp_auth_file = config->alarms->smtp->auth_file;
+
+		char *sa_set_host = (char *)hash_table_get(req->hash, "alarms.smtp_auth.set.host");
+		if (sa_set_host) {
+			char *sa_set_user = (char *)hash_table_get(req->hash, "alarms.smtp_auth.set.user");
+			char *sa_set_password = (char *)hash_table_get(req->hash, "alarms.smtp_auth.set.password");
+			if (!*sa_set_host || !field_is_safe(sa_set_host))
+				return api_error_json("invalid or empty alarms.smtp_auth.set.host");
+			if (!sa_set_user || !*sa_set_user || !field_is_safe(sa_set_user))
+				return api_error_json("invalid or empty alarms.smtp_auth.set.user");
+			if (!sa_set_password || !*sa_set_password || !field_is_safe(sa_set_password))
+				return api_error_json("invalid or empty alarms.smtp_auth.set.password");
+			/* Upsert: drop any existing entry for this host, then append the new one. */
+			if (remove_matching_lines(caster->config_dir, smtp_auth_file, ':', 0, sa_set_host) < 0)
+				return api_error_json("cannot rewrite smtp auth_file");
+			FILE *f = fopen_absolute(caster->config_dir, smtp_auth_file, "a");
+			if (f == NULL)
+				return api_error_json("cannot open smtp auth_file");
+			fprintf(f, "%s:%s:%s\n", sa_set_host, sa_set_user, sa_set_password);
+			fclose(f);
+			changed = 1;
+		}
+
+		char *sa_remove = (char *)hash_table_get(req->hash, "alarms.smtp_auth.remove");
+		if (sa_remove) {
+			if (!field_is_safe(sa_remove))
+				return api_error_json("invalid characters in alarms.smtp_auth.remove");
+			int r = remove_matching_lines(caster->config_dir, smtp_auth_file, ':', 0, sa_remove);
+			if (r <= 0)
+				return api_error_json(r < 0 ? "cannot rewrite smtp auth_file" : "that host isn't present in the smtp auth_file");
+			changed = 1;
+		}
+	}
+
+	/*
+	 * Everything from here on mutates a scratch copy of the struct loaded
+	 * straight from caster.yaml, then saves the whole thing back out via
+	 * cyaml -- no more hand-rolled per-shape text editing.
+	 */
+	struct config *edit = config_load_for_edit(caster->config_file);
+	if (!edit)
+		return api_error_json("cannot read config file");
+	int yaml_changed = 0;
 
 	char *log_level = (char *)hash_table_get(req->hash, "log_level");
 	if (log_level) {
-		if (log_level_from_name(log_level) < 0)
-			return api_error_json("invalid log_level");
-		if (set_yaml_scalar(caster->config_file, "log_level", log_level) < 0)
-			return api_error_json("cannot rewrite config file");
+		int lvl = log_level_from_name(log_level);
+		if (lvl < 0) { config_free_edit(edit); return api_error_json("invalid log_level"); }
+		edit->log_level = lvl;
 		changed = 1;
+		yaml_changed = 1;
+	}
+
+	for (int i = 0; TOP_FIELDS[i].post_key; i++) {
+		char *value = (char *)hash_table_get(req->hash, TOP_FIELDS[i].post_key);
+		if (!value)
+			continue;
+		void *field_ptr = (char *)edit + TOP_FIELDS[i].offset;
+		if (apply_scalar_field(field_ptr, TOP_FIELDS[i].type, value, &errmsg) < 0) {
+			config_free_edit(edit);
+			return api_error_json(errmsg);
+		}
+		changed = 1;
+		yaml_changed = 1;
+	}
+
+	char *v;
+
+	v = (char *)hash_table_get(req->hash, "alarms.subject");
+	if (v) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a || apply_string_field(&a->subject, v, &errmsg) < 0) {
+			config_free_edit(edit);
+			return api_error_json(a ? errmsg : "out of memory");
+		}
+		changed = 1; yaml_changed = 1;
+	}
+	v = (char *)hash_table_get(req->hash, "alarms.min_interval_minutes");
+	if (v) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a || apply_int_field(&a->min_interval_minutes, v, &errmsg) < 0) {
+			config_free_edit(edit);
+			return api_error_json(a ? errmsg : "out of memory");
+		}
+		changed = 1; yaml_changed = 1;
+	}
+	v = (char *)hash_table_get(req->hash, "alarms.ruckus_path");
+	if (v) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a || apply_string_field(&a->ruckus_path, v, &errmsg) < 0) {
+			config_free_edit(edit);
+			return api_error_json(a ? errmsg : "out of memory");
+		}
+		changed = 1; yaml_changed = 1;
+	}
+	v = (char *)hash_table_get(req->hash, "alarms.email_template");
+	if (v) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a || apply_string_field(&a->email_template, v, &errmsg) < 0) {
+			config_free_edit(edit);
+			return api_error_json(a ? errmsg : "out of memory");
+		}
+		changed = 1; yaml_changed = 1;
+	}
+
+	v = (char *)hash_table_get(req->hash, "alarms.smtp.host");
+	if (v) {
+		struct config_alarms *a = ensure_alarms(edit);
+		struct config_alarms_smtp *s = a ? ensure_smtp(a) : NULL;
+		if (!s || apply_string_field(&s->host, v, &errmsg) < 0) {
+			config_free_edit(edit);
+			return api_error_json(s ? errmsg : "out of memory");
+		}
+		changed = 1; yaml_changed = 1;
+	}
+	v = (char *)hash_table_get(req->hash, "alarms.smtp.port");
+	if (v) {
+		struct config_alarms *a = ensure_alarms(edit);
+		struct config_alarms_smtp *s = a ? ensure_smtp(a) : NULL;
+		if (!s) { config_free_edit(edit); return api_error_json("out of memory"); }
+		char *end;
+		long portval = strtol(v, &end, 10);
+		if (end == v || *end || portval < 0 || portval > 65535) {
+			config_free_edit(edit);
+			return api_error_json("alarms.smtp.port must be a valid port number");
+		}
+		s->port = (unsigned short)portval;
+		changed = 1; yaml_changed = 1;
+	}
+	v = (char *)hash_table_get(req->hash, "alarms.smtp.auth_file");
+	if (v) {
+		struct config_alarms *a = ensure_alarms(edit);
+		struct config_alarms_smtp *s = a ? ensure_smtp(a) : NULL;
+		if (!s || apply_string_field(&s->auth_file, v, &errmsg) < 0) {
+			config_free_edit(edit);
+			return api_error_json(s ? errmsg : "out of memory");
+		}
+		changed = 1; yaml_changed = 1;
+	}
+	v = (char *)hash_table_get(req->hash, "alarms.smtp.tls");
+	if (v) {
+		if (strcasecmp(v, "none") && strcasecmp(v, "starttls") && strcasecmp(v, "smtps")) {
+			config_free_edit(edit);
+			return api_error_json("alarms.smtp.tls must be none, starttls or smtps");
+		}
+		struct config_alarms *a = ensure_alarms(edit);
+		struct config_alarms_smtp *s = a ? ensure_smtp(a) : NULL;
+		if (!s) { config_free_edit(edit); return api_error_json("out of memory"); }
+		s->tls = !strcasecmp(v, "starttls") ? CONFIG_ALARMS_TLS_STARTTLS
+			: !strcasecmp(v, "smtps") ? CONFIG_ALARMS_TLS_SMTPS : CONFIG_ALARMS_TLS_NONE;
+		changed = 1; yaml_changed = 1;
+	}
+
+	v = (char *)hash_table_get(req->hash, "alarms.station_offline.after_minutes");
+	if (v) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		if (!a->station_offline)
+			a->station_offline = (struct config_alarms_threshold *)calloc(1, sizeof(struct config_alarms_threshold));
+		if (!a->station_offline || apply_int_field(&a->station_offline->after_minutes, v, &errmsg) < 0) {
+			config_free_edit(edit);
+			return api_error_json(a->station_offline ? errmsg : "out of memory");
+		}
+		changed = 1; yaml_changed = 1;
+	}
+	v = (char *)hash_table_get(req->hash, "alarms.station_online.after_minutes");
+	if (v) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		if (!a->station_online)
+			a->station_online = (struct config_alarms_threshold *)calloc(1, sizeof(struct config_alarms_threshold));
+		if (!a->station_online || apply_int_field(&a->station_online->after_minutes, v, &errmsg) < 0) {
+			config_free_edit(edit);
+			return api_error_json(a->station_online ? errmsg : "out of memory");
+		}
+		changed = 1; yaml_changed = 1;
+	}
+
+	char *lv_min_sats = (char *)hash_table_get(req->hash, "alarms.low_sv_count.min_sats");
+	char *lv_after = (char *)hash_table_get(req->hash, "alarms.low_sv_count.after_minutes");
+	if (lv_min_sats || lv_after) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		if (!a->low_sv_count)
+			a->low_sv_count = (struct config_alarms_low_sv *)calloc(1, sizeof(struct config_alarms_low_sv));
+		if (!a->low_sv_count) { config_free_edit(edit); return api_error_json("out of memory"); }
+		if (lv_min_sats && apply_int_field(&a->low_sv_count->min_sats, lv_min_sats, &errmsg) < 0) {
+			config_free_edit(edit);
+			return api_error_json(errmsg);
+		}
+		if (lv_after && apply_int_field(&a->low_sv_count->after_minutes, lv_after, &errmsg) < 0) {
+			config_free_edit(edit);
+			return api_error_json(errmsg);
+		}
+		changed = 1; yaml_changed = 1;
+	}
+
+	char *pd_lat = (char *)hash_table_get(req->hash, "alarms.position_drift.lat_mm");
+	char *pd_lon = (char *)hash_table_get(req->hash, "alarms.position_drift.lon_mm");
+	char *pd_alt = (char *)hash_table_get(req->hash, "alarms.position_drift.alt_mm");
+	char *pd_after = (char *)hash_table_get(req->hash, "alarms.position_drift.after_minutes");
+	if (pd_lat || pd_lon || pd_alt || pd_after) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		if (!a->position_drift)
+			a->position_drift = (struct config_alarms_position_drift *)calloc(1, sizeof(struct config_alarms_position_drift));
+		if (!a->position_drift) { config_free_edit(edit); return api_error_json("out of memory"); }
+		if (pd_lat && apply_int_field(&a->position_drift->lat_mm, pd_lat, &errmsg) < 0) { config_free_edit(edit); return api_error_json(errmsg); }
+		if (pd_lon && apply_int_field(&a->position_drift->lon_mm, pd_lon, &errmsg) < 0) { config_free_edit(edit); return api_error_json(errmsg); }
+		if (pd_alt && apply_int_field(&a->position_drift->alt_mm, pd_alt, &errmsg) < 0) { config_free_edit(edit); return api_error_json(errmsg); }
+		if (pd_after && apply_int_field(&a->position_drift->after_minutes, pd_after, &errmsg) < 0) { config_free_edit(edit); return api_error_json(errmsg); }
+		changed = 1; yaml_changed = 1;
 	}
 
 	char *recipients_remove = (char *)hash_table_get(req->hash, "alarms.recipients.remove");
 	if (recipients_remove) {
 		char *rend;
 		long idx = strtol(recipients_remove, &rend, 10);
-		if (rend == recipients_remove || *rend || idx < 0)
+		if (rend == recipients_remove || *rend || idx < 0) {
+			config_free_edit(edit);
 			return api_error_json("alarms.recipients.remove must be a non-negative integer");
-		int r = remove_yaml_recipient(caster->config_file, (int)idx);
-		if (r == -2)
-			return api_error_json("at least one recipient is required");
-		if (r < 0)
+		}
+		struct config_alarms *a = edit->alarms;
+		if (!a || idx >= a->recipients_count) {
+			config_free_edit(edit);
 			return api_error_json("that recipient index isn't present in the config file");
-		changed = 1;
+		}
+		if (a->recipients_count <= 1) {
+			config_free_edit(edit);
+			return api_error_json("at least one recipient is required");
+		}
+		struct config_alarms_recipient *r = &a->recipients[idx];
+		free((char *)r->name);
+		free((char *)r->email);
+		for (int j = 0; j < r->alarm_types_count; j++)
+			free((char *)r->alarm_types[j]);
+		free(r->alarm_types);
+		memmove(r, r + 1, (a->recipients_count - idx - 1) * sizeof(*r));
+		a->recipients_count--;
+		changed = 1; yaml_changed = 1;
 	}
 
 	char *recipients_add_email = (char *)hash_table_get(req->hash, "alarms.recipients.add.email");
 	if (recipients_add_email) {
 		char *recipients_add_name = (char *)hash_table_get(req->hash, "alarms.recipients.add.name");
-		if (!*recipients_add_email || !field_is_safe(recipients_add_email))
-			return api_error_json("invalid or empty value for a setting");
-		if (recipients_add_name && !field_is_safe(recipients_add_name))
-			return api_error_json("invalid characters in a setting");
-		int r = add_yaml_recipient(caster->config_file, recipients_add_name, recipients_add_email);
-		if (r < 0)
-			return api_error_json("cannot add a recipient (alarms.recipients needs at least one existing entry in caster.yaml to copy formatting from)");
-		changed = 1;
-	}
-
-	for (int i = 0; FLOAT_FIELDS[i]; i++) {
-		char *value = (char *)hash_table_get(req->hash, FLOAT_FIELDS[i]);
-		if (!value)
-			continue;
-		strtod(value, &end);
-		if (end == value || *end)
-			return api_error_json("a numeric setting is not a valid number");
-		if (set_yaml_scalar(caster->config_file, FLOAT_FIELDS[i], value) < 0)
-			return api_error_json("cannot rewrite config file");
-		changed = 1;
-	}
-
-	for (int i = 0; NESTED_FIELDS[i].post_key; i++) {
-		const struct nested_field_def *nf = &NESTED_FIELDS[i];
-		char *value = (char *)hash_table_get(req->hash, nf->post_key);
-		if (!value)
-			continue;
-		if (nf->is_int) {
-			strtol(value, &end, 10);
-			if (end == value || *end)
-				return api_error_json("a numeric setting is not a valid integer");
-		} else if (!*value || !field_is_safe(value)) {
+		if (!*recipients_add_email || !field_is_safe(recipients_add_email)) {
+			config_free_edit(edit);
 			return api_error_json("invalid or empty value for a setting");
 		}
-		int r = set_yaml_nested_scalar(caster->config_file, nf->path, nf->path_len, value);
-		if (r == -2)
-			return api_error_json("current value is not a plain scalar in the config file; edit it directly");
-		if (r < 0)
-			return api_error_json("setting not present in the config file (its parent block may be disabled)");
-		changed = 1;
-	}
-
-	char *smtp_tls = (char *)hash_table_get(req->hash, "alarms.smtp.tls");
-	if (smtp_tls) {
-		if (strcasecmp(smtp_tls, "none") && strcasecmp(smtp_tls, "starttls") && strcasecmp(smtp_tls, "smtps"))
-			return api_error_json("alarms.smtp.tls must be none, starttls or smtps");
-		static const struct yaml_path_seg TLS_PATH[] = { {"alarms", -1}, {"smtp", -1}, {"tls", -1} };
-		int r = set_yaml_nested_scalar(caster->config_file, TLS_PATH, 3, smtp_tls);
-		if (r == -2)
-			return api_error_json("alarms.smtp.tls is not a plain scalar in the config file");
-		if (r < 0)
-			return api_error_json("alarms.smtp.tls not present in the config file");
-		changed = 1;
+		if (recipients_add_name && !field_is_safe(recipients_add_name)) {
+			config_free_edit(edit);
+			return api_error_json("invalid characters in a setting");
+		}
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		struct config_alarms_recipient *nr = (struct config_alarms_recipient *)realloc(
+			a->recipients, (a->recipients_count + 1) * sizeof(*a->recipients));
+		if (!nr) { config_free_edit(edit); return api_error_json("out of memory"); }
+		a->recipients = nr;
+		struct config_alarms_recipient *r = &a->recipients[a->recipients_count];
+		r->name = (recipients_add_name && *recipients_add_name) ? strdup(recipients_add_name) : NULL;
+		r->email = strdup(recipients_add_email);
+		r->alarm_types = NULL;
+		r->alarm_types_count = 0;
+		a->recipients_count++;
+		changed = 1; yaml_changed = 1;
 	}
 
 	for (int idx = 0; idx < 20; idx++) {
 		char key[64];
+		struct config_alarms *a = edit->alarms;
+
 		snprintf(key, sizeof key, "alarms.recipients[%d].name", idx);
 		char *value = (char *)hash_table_get(req->hash, key);
 		if (value) {
-			if (!field_is_safe(value))
-				return api_error_json("invalid characters in a setting");
-			struct yaml_path_seg path[] = { {"alarms", -1}, {"recipients", -1}, {NULL, idx}, {"name", -1} };
-			int r = set_yaml_nested_scalar(caster->config_file, path, 4, value);
-			if (r == -2)
-				return api_error_json("a recipient name is not a plain scalar in the config file");
-			if (r < 0)
-				return api_error_json("that recipient index isn't present in the config file");
-			changed = 1;
+			if (!field_is_safe(value)) { config_free_edit(edit); return api_error_json("invalid characters in a setting"); }
+			if (!a || idx >= a->recipients_count) { config_free_edit(edit); return api_error_json("that recipient index isn't present in the config file"); }
+			free((char *)a->recipients[idx].name);
+			a->recipients[idx].name = *value ? strdup(value) : NULL;
+			changed = 1; yaml_changed = 1;
 		}
 
 		snprintf(key, sizeof key, "alarms.recipients[%d].email", idx);
 		value = (char *)hash_table_get(req->hash, key);
 		if (value) {
-			if (!*value || !field_is_safe(value))
-				return api_error_json("invalid or empty value for a setting");
-			struct yaml_path_seg path[] = { {"alarms", -1}, {"recipients", -1}, {NULL, idx}, {"email", -1} };
-			int r = set_yaml_nested_scalar(caster->config_file, path, 4, value);
-			if (r == -2)
-				return api_error_json("a recipient email is not a plain scalar in the config file");
-			if (r < 0)
-				return api_error_json("that recipient index isn't present in the config file");
-			changed = 1;
+			if (!*value || !field_is_safe(value)) { config_free_edit(edit); return api_error_json("invalid or empty value for a setting"); }
+			if (!a || idx >= a->recipients_count) { config_free_edit(edit); return api_error_json("that recipient index isn't present in the config file"); }
+			free((char *)a->recipients[idx].email);
+			a->recipients[idx].email = strdup(value);
+			changed = 1; yaml_changed = 1;
 		}
 
 		snprintf(key, sizeof key, "alarms.recipients[%d].alarm_types", idx);
 		value = (char *)hash_table_get(req->hash, key);
 		if (value) {
-			const char *type_ptrs[ALARM_EVENT_TYPE_COUNT];
-			int type_count = 0;
-			char *copy = mystrdup(value);
-			int bad = 0;
-			if (*copy) {
-				char *tok = strtok(copy, ",");
-				while (tok && type_count < ALARM_EVENT_TYPE_COUNT) {
-					while (*tok == ' ')
-						tok++;
-					if (!is_valid_alarm_type(tok)) { bad = 1; break; }
-					type_ptrs[type_count++] = tok;
-					tok = strtok(NULL, ",");
-				}
-			}
-			if (bad) {
-				strfree(copy);
+			if (!a || idx >= a->recipients_count) { config_free_edit(edit); return api_error_json("that recipient index isn't present in the config file"); }
+			struct config_alarms_recipient *r = &a->recipients[idx];
+			const char **types;
+			int count;
+			if (parse_alarm_types(value, &types, &count) < 0) {
+				config_free_edit(edit);
 				return api_error_json("unknown alarm type in alarms.recipients[N].alarm_types");
 			}
-			int r = set_yaml_recipient_alarm_types(caster->config_file, idx, type_ptrs, type_count);
-			strfree(copy);
-			if (r < 0)
-				return api_error_json("that recipient index isn't present in the config file");
-			changed = 1;
+			for (int j = 0; j < r->alarm_types_count; j++)
+				free((char *)r->alarm_types[j]);
+			free(r->alarm_types);
+			r->alarm_types = types;
+			r->alarm_types_count = count;
+			changed = 1; yaml_changed = 1;
 		}
 	}
 
-	for (int i = 0; STRING_FIELDS[i]; i++) {
-		char *value = (char *)hash_table_get(req->hash, STRING_FIELDS[i]);
-		if (!value)
-			continue;
-		if (!*value || !field_is_safe(value))
-			return api_error_json("invalid or empty value for a setting");
-		if (set_yaml_scalar(caster->config_file, STRING_FIELDS[i], value) < 0)
-			return api_error_json("cannot rewrite config file");
-		changed = 1;
+	char *mountpoints_remove = (char *)hash_table_get(req->hash, "alarms.mountpoints.remove");
+	if (mountpoints_remove) {
+		if (!field_is_safe(mountpoints_remove)) { config_free_edit(edit); return api_error_json("invalid characters in alarms.mountpoints.remove"); }
+		struct config_alarms *a = edit->alarms;
+		int found = -1;
+		for (int i = 0; a && i < a->mountpoints_count; i++)
+			if (!strcmp(a->mountpoints[i].mountpoint, mountpoints_remove)) { found = i; break; }
+		if (found < 0) {
+			config_free_edit(edit);
+			return api_error_json("that mountpoint has no alarm filter to remove");
+		}
+		struct config_alarms_mountpoint *m = &a->mountpoints[found];
+		free((char *)m->mountpoint);
+		for (int j = 0; j < m->alarm_types_count; j++)
+			free((char *)m->alarm_types[j]);
+		free(m->alarm_types);
+		memmove(m, m + 1, (a->mountpoints_count - found - 1) * sizeof(*m));
+		a->mountpoints_count--;
+		changed = 1; yaml_changed = 1;
 	}
 
-	for (int i = 0; INT_FIELDS[i]; i++) {
-		char *value = (char *)hash_table_get(req->hash, INT_FIELDS[i]);
-		if (!value)
-			continue;
-		strtol(value, &end, 10);
-		if (end == value || *end)
-			return api_error_json("a numeric setting is not a valid integer");
-		if (set_yaml_scalar(caster->config_file, INT_FIELDS[i], value) < 0)
-			return api_error_json("cannot rewrite config file");
-		changed = 1;
+	char *mountpoints_add_mp = (char *)hash_table_get(req->hash, "alarms.mountpoints.add.mountpoint");
+	if (mountpoints_add_mp) {
+		char *mountpoints_add_types = (char *)hash_table_get(req->hash, "alarms.mountpoints.add.alarm_types");
+		if (!*mountpoints_add_mp || !field_is_safe(mountpoints_add_mp)) {
+			config_free_edit(edit);
+			return api_error_json("invalid or empty alarms.mountpoints.add.mountpoint");
+		}
+		if (!mountpoints_add_types || !*mountpoints_add_types) {
+			config_free_edit(edit);
+			return api_error_json("alarms.mountpoints.add.alarm_types is required");
+		}
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		for (int i = 0; i < a->mountpoints_count; i++)
+			if (!strcmp(a->mountpoints[i].mountpoint, mountpoints_add_mp)) {
+				config_free_edit(edit);
+				return api_error_json("that mountpoint already has an alarm filter");
+			}
+		const char **types;
+		int count;
+		if (parse_alarm_types(mountpoints_add_types, &types, &count) < 0) {
+			config_free_edit(edit);
+			return api_error_json("unknown alarm type in alarms.mountpoints.add.alarm_types");
+		}
+		struct config_alarms_mountpoint *nm = (struct config_alarms_mountpoint *)realloc(
+			a->mountpoints, (a->mountpoints_count + 1) * sizeof(*a->mountpoints));
+		if (!nm) {
+			for (int j = 0; j < count; j++)
+				free((char *)types[j]);
+			free((void *)types);
+			config_free_edit(edit);
+			return api_error_json("out of memory");
+		}
+		a->mountpoints = nm;
+		a->mountpoints[a->mountpoints_count].mountpoint = strdup(mountpoints_add_mp);
+		a->mountpoints[a->mountpoints_count].alarm_types = types;
+		a->mountpoints[a->mountpoints_count].alarm_types_count = count;
+		a->mountpoints_count++;
+		changed = 1; yaml_changed = 1;
 	}
 
-	for (int i = 0; SIZE_FIELDS[i]; i++) {
-		char *value = (char *)hash_table_get(req->hash, SIZE_FIELDS[i]);
-		if (!value)
-			continue;
-		/* strtoul() accepts a leading '-' and silently wraps it into a huge
-		 * unsigned value instead of failing, so reject it explicitly. */
-		if (value[0] == '-')
-			return api_error_json("a size setting must be a positive integer");
-		unsigned long v = strtoul(value, &end, 10);
-		if (end == value || *end || v == 0)
-			return api_error_json("a size setting must be a positive integer");
-		if (set_yaml_scalar(caster->config_file, SIZE_FIELDS[i], value) < 0)
-			return api_error_json("cannot rewrite config file");
-		changed = 1;
+	for (int idx = 0; idx < 20; idx++) {
+		char key[64];
+		snprintf(key, sizeof key, "alarms.mountpoints[%d].alarm_types", idx);
+		char *value = (char *)hash_table_get(req->hash, key);
+		if (value) {
+			struct config_alarms *a = edit->alarms;
+			if (!a || idx >= a->mountpoints_count) { config_free_edit(edit); return api_error_json("that mountpoint filter index isn't present in the config file"); }
+			struct config_alarms_mountpoint *m = &a->mountpoints[idx];
+			const char **types;
+			int count;
+			if (parse_alarm_types(value, &types, &count) < 0) {
+				config_free_edit(edit);
+				return api_error_json("unknown alarm type in alarms.mountpoints[N].alarm_types");
+			}
+			for (int j = 0; j < m->alarm_types_count; j++)
+				free((char *)m->alarm_types[j]);
+			free(m->alarm_types);
+			m->alarm_types = types;
+			m->alarm_types_count = count;
+			changed = 1; yaml_changed = 1;
+		}
 	}
 
-	if (!changed)
+	if (!changed) {
+		config_free_edit(edit);
 		return api_error_json("no settings provided");
+	}
+
+	if (yaml_changed && config_save_for_edit(caster->config_file, edit) < 0) {
+		config_free_edit(edit);
+		return api_error_json("cannot write config file");
+	}
+	config_free_edit(edit);
 
 	int r = caster_reload(caster);
 	char result[40];
