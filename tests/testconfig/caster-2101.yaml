@@ -1,34 +1,40 @@
 listen:
-  - port:		2101
-    ip:			127.0.0.1
-
-host_auth_file:		host.auth
-source_auth_file:	source.auth
-sourcetable_file:	sourcetable.dat
-blocklist_file:		blocklist1
-access_log:		../test-access.log
-log:			../test-caster.log
-
-trusted_http_ip_header:	"X-Forwarded-For"
-
-idle_max_delay:			10
-http_content_length_max:	1000000
-http_header_max_size:		4096
-
-syncer_auth:		'587e5bbadbc6186fad0d6177eb10a6cd9d5cb934d3d5f155107592535bd20290'
-
+- ip: 127.0.0.1
+  port: 2101
+  queue_size: 0
+  tls: false
+hysteresis_m: 500
+max_nearest_lookup_distance_m: 0
+nearest_base_count_target: 0
+trusted_http_ip_header: X-Forwarded-For
+source_auth_file: source.auth
+host_auth_file: host.auth
+rover_auth_file: rover.auth
+blocklist_file: blocklist1
+sourcetable_file: sourcetable.dat
+sidecar_stats_file: /home/tj/demo/testconfig/mountpoints.json
+sourcetable_priority: 90
+backlog_socket: 0
+backlog_evbuffer: 0
+sourcetable_fetch_timeout: 0
+on_demand_source_timeout: 0
+idle_max_delay: 10
+source_read_timeout: 0
+ntripcli_default_read_timeout: 0
+ntripcli_default_write_timeout: 0
+ntripsrv_default_read_timeout: 0
+ntripsrv_default_write_timeout: 0
+http_header_max_size: 4096
+http_content_length_max: 1000000
+access_log: ../test-access.log
+log: ../test-caster.log
+log_level: EDEBUG
+admin_user: admin
 webroots:
-  - uri:		/example-well-known/
-    path:		webroot/
-
-log_level:	EDEBUG
-
-admin_user:	admin
-
+- path: webroot/
+  uri: /example-well-known/
+syncer_auth: 587e5bbadbc6186fad0d6177eb10a6cd9d5cb934d3d5f155107592535bd20290
 ui_dir: /mnt/c/Users/TJ/Documents/Code/github/chilopod-caster/ui/dist
-hysteresis_m:	500
-sourcetable_priority:	90
-
 alarms:
   smtp:
     host: smtp.gmail.com
@@ -36,13 +42,16 @@ alarms:
     tls: starttls
     auth_file: smtp.auth
   recipients:
-    - name: TJ
-      email: tjraklovits@gmail.com
+  - name: TJ
+    email: tjraklovits@gmail.com
+  subject: Chilopod Alarm
   min_interval_minutes: 15
-  ruckus_path: /usr/local/sbin/ruckus
+  ruckus_path: /mnt/c/Users/TJ/Documents/Code/github/chilopod-caster/ruckus/ruckus
+  email_template: alarm-email.html
   station_offline:
     after_minutes: 5
-  station_online: {}
+  station_online:
+    after_minutes: 0
   low_sv_count:
     min_sats: 9
     after_minutes: 2
