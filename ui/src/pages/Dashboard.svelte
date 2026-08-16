@@ -14,6 +14,7 @@
   let rtcm = $state(null);
   let logEntries = $state([]);
   let alarmEntries = $state([]);
+  let settings = $state(null);
   let error = $state('');
   let reloading = $state(false);
   let reloadMsg = $state('');
@@ -57,6 +58,20 @@
     return m.toFixed(0) + ' m';
   }
 
+  function readinessState(status, notConfiguredLabel, notReadyLabel, readyLabel) {
+    if (!status?.configured) return { cls: 'off', label: notConfiguredLabel };
+    if (!status.ready) return { cls: 'warn', label: notReadyLabel };
+    return { cls: 'good', label: readyLabel };
+  }
+
+  function sidecarStatus() {
+    return readinessState(settings?.sidecar, 'not configured', 'configured, no data', 'active');
+  }
+
+  function ruckusStatus() {
+    return readinessState(settings?.ruckus, 'not configured', 'binary not found', 'ready');
+  }
+
   function formatLatency(ms) {
     if (ms == null) return '-';
     if (ms >= 1000) return (ms / 1000).toFixed(1) + 's';
@@ -83,9 +98,9 @@
 
   async function fetchAll() {
     try {
-      const [netRes, livesourcesRes, memRes, tablesRes, rtcmRes, logRes, alarmsRes] = await Promise.all([
+      const [netRes, livesourcesRes, memRes, tablesRes, rtcmRes, logRes, alarmsRes, settingsRes] = await Promise.all([
         apiGet('net'), apiGet('livesources'), apiGet('mem'),
-        apiGet('sourcetables'), apiGet('rtcm'), apiGet('log'), apiGet('alarms'),
+        apiGet('sourcetables'), apiGet('rtcm'), apiGet('log'), apiGet('alarms'), apiGet('settings'),
       ]);
       error = '';
       net = netRes;
@@ -95,6 +110,7 @@
       rtcm = rtcmRes;
       logEntries = logRes.filter((e) => e.level <= 6).slice(-6).reverse();
       alarmEntries = alarmsRes.slice(0, 6);
+      settings = settingsRes;
 
       const cc = connCounts(net);
       connHistory = pushHistory(connHistory, cc.total, CONN_WINDOW_SAMPLES);
@@ -131,7 +147,7 @@
   }
 
   function rovers(n) {
-    return Object.values(n).filter((c) => c.type === 'client');
+    return Object.values(n).filter((c) => c.type === 'client' && c.gga != null);
   }
 
   function fixBreakdown(roverList) {
@@ -238,6 +254,8 @@
     {@const churnW = 1040}
     {@const churnBarW = (churnW - 19 * 4) / 20}
     {@const maxChurn = Math.max(1, ...churnHistory)}
+    {@const sidecar = sidecarStatus()}
+    {@const ruckus = ruckusStatus()}
 
     <div class="bare-strip">
       <span class="strip-label">Groups</span>
@@ -251,6 +269,15 @@
           </span>
         {/each}
       {/if}
+      <span class="strip-label strip-label-right">System</span>
+      <span class="chip" title="Sidecar stats file: {settings?.sidecar?.configured ? 'configured' : 'not configured'}">
+        <span class="dot" class:good={sidecar.cls === 'good'} class:warn={sidecar.cls === 'warn'} class:off={sidecar.cls === 'off'}></span>
+        Sidecar: {sidecar.label}
+      </span>
+      <span class="chip" title={settings?.ruckus?.path ? `ruckus_path: ${settings.ruckus.path}` : 'alarms not configured'}>
+        <span class="dot" class:good={ruckus.cls === 'good'} class:warn={ruckus.cls === 'warn'} class:off={ruckus.cls === 'off'}></span>
+        Ruckus: {ruckus.label}
+      </span>
     </div>
 
     <div class="board">
@@ -481,6 +508,10 @@
   .strip-empty {
     font-size: 0.78rem;
     color: #475569;
+  }
+
+  .strip-label-right {
+    margin-left: auto;
   }
 
   .board {
