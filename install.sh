@@ -21,7 +21,7 @@ if [ ! -e rtcm-go/cmd/sidecar ] || [ ! -e ruckus/main.go ]; then
 fi
 
 if command -v apt-get >/dev/null 2>&1; then
-	apt-get install -y build-essential libcyaml-dev libyaml-dev libevent-dev libjson-c-dev libssl-dev
+	apt-get install -y build-essential libcyaml-dev libevent-dev libjson-c-dev libssl-dev
 fi
 
 # Debian/Ubuntu's golang-go package is often older than the Go version this
@@ -68,7 +68,7 @@ chown caster "$LOG_DIR"
 
 cp -r ui/dist/. "$CONF_DIR/ui/"
 
-for f in caster.yaml source.auth host.auth sourcetable.dat blocklist; do
+for f in caster.yaml source.auth host.auth sourcetable.dat blocklist alarm-email.html; do
 	if [ -e "$CONF_DIR/$f" ]; then
 		echo "Skipping $f: $CONF_DIR/$f already exists."
 	else
