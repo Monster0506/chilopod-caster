@@ -448,6 +448,8 @@ oldrover:somepassword:N
 
 Leaving this setting unset keeps RTCM streams open to any client, with no credentials required -- Chilopod's behavior before this setting existed.
 
+You can manage accounts from the Auth page in the admin UI (`/adm/ui/`), or edit this file by hand.
+
 ### `admin_user`
 
 The key that the caster looks up in `source_auth_file` to authenticate `/adm` API requests. The default value is `admin`.
@@ -607,7 +609,7 @@ alarms:
     after_minutes: 5
 ```
 
-`smtp.auth_file` follows the same `host:username:password` format as [`host_auth_file`](#host_auth_file), keeping credentials out of `caster.yaml`. Omit it entirely to send through an unauthenticated relay, for example a local Postfix or Exim in relay-only mode -- Chilopod does not require or assume any specific email provider.
+`smtp.auth_file` follows the same `host:username:password` format as [`host_auth_file`](#host_auth_file), keeping credentials out of `caster.yaml`. Omit it entirely to send through an unauthenticated relay, for example a local Postfix or Exim in relay-only mode -- Chilopod does not require or assume any specific email provider. You can manage credentials from the Auth page in the admin UI (`/adm/ui/`), or edit this file by hand.
 
 `ruckus_path` must point at a built [`ruckus`](#alarm-notifications-ruckus) binary. If it does not exist or fails to run, Chilopod logs the failure and records it at `GET /adm/api/v1/alarms`; it does not retry beyond what `ruckus` itself does internally.
 
