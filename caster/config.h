@@ -194,10 +194,24 @@ struct config_alarms_position_drift {
 	int after_minutes;
 };
 
+/*
+ * Restricts which alarm types are evaluated at all for one mountpoint.
+ * A mountpoint absent from config_alarms.mountpoints[], or present with
+ * alarm_types == NULL, gets every alarm type (the default, unfiltered).
+ */
+struct config_alarms_mountpoint {
+	const char *mountpoint;
+	const char **alarm_types;
+	int alarm_types_count;
+};
+
 struct config_alarms {
 	struct config_alarms_smtp *smtp;
 	struct config_alarms_recipient *recipients;
 	int recipients_count;
+
+	struct config_alarms_mountpoint *mountpoints;
+	int mountpoints_count;
 
 	const char *subject;
 	int min_interval_minutes;	// rate limit: don't send more than once every N minutes
@@ -350,6 +364,7 @@ struct config {
 	 */
 	const char *host_auth_filename;
 	const char *source_auth_filename;
+	const char *rover_auth_filename;	// optional; NULL disables rover authentication
 	const char *blocklist_filename;
 	const char *sourcetable_filename;
 	const char *sidecar_stats_filename;
@@ -395,6 +410,7 @@ struct config {
 	/* Auth file entries */
 	struct auth_entry *host_auth;
 	struct auth_entry *source_auth;
+	struct rover_auth_entry *rover_auth;
 
 	/* Quota/block list by IP prefix */
 	struct prefix_table *blocklist;
@@ -414,6 +430,18 @@ extern size_t backlog_evbuffer;
 
 struct config *config_parse(const char *filename, long long config_gen);
 void config_free(struct config *this);
+
+/*
+ * Scratch config editing for the Settings API: load the raw file (no
+ * defaults applied, no runtime fields like host_auth/dyn populated -- it's
+ * never installed as the live config), mutate specific fields directly,
+ * then save the whole struct back out via the same cyaml schema that loads
+ * it. Free with config_free_edit(), never config_free() -- the runtime
+ * fields config_free() touches were never initialized here.
+ */
+struct config *config_load_for_edit(const char *filename);
+int config_save_for_edit(const char *filename, struct config *edit);
+void config_free_edit(struct config *edit);
 
 static inline REFCNT_INCREF_BODY(config_incref, struct config);
 static inline REFCNT_DECREF_BODY(config_decref, struct config, config_free);

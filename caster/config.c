@@ -382,6 +382,20 @@ static const cyaml_schema_value_t alarms_recipient_schema = {
 		struct config_alarms_recipient, alarms_recipient_fields_schema),
 };
 
+static const cyaml_schema_field_t alarms_mountpoint_fields_schema[] = {
+	CYAML_FIELD_STRING_PTR(
+		"mountpoint", CYAML_FLAG_POINTER, struct config_alarms_mountpoint, mountpoint, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_SEQUENCE(
+		"alarm_types", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL,
+		struct config_alarms_mountpoint, alarm_types, &alarms_recipient_alarm_type_schema, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_END
+};
+
+static const cyaml_schema_value_t alarms_mountpoint_schema = {
+	CYAML_VALUE_MAPPING(CYAML_FLAG_DEFAULT,
+		struct config_alarms_mountpoint, alarms_mountpoint_fields_schema),
+};
+
 static const cyaml_schema_field_t alarms_threshold_fields_schema[] = {
 	CYAML_FIELD_INT(
 		"after_minutes", CYAML_FLAG_OPTIONAL, struct config_alarms_threshold, after_minutes),
@@ -414,6 +428,9 @@ static const cyaml_schema_field_t alarms_fields_schema[] = {
 	CYAML_FIELD_SEQUENCE(
 		"recipients", CYAML_FLAG_POINTER,
 		struct config_alarms, recipients, &alarms_recipient_schema, 1, CYAML_UNLIMITED),
+	CYAML_FIELD_SEQUENCE(
+		"mountpoints", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL,
+		struct config_alarms, mountpoints, &alarms_mountpoint_schema, 0, CYAML_UNLIMITED),
 	CYAML_FIELD_STRING_PTR(
 		"subject", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config_alarms, subject, 0, CYAML_UNLIMITED),
 	CYAML_FIELD_INT(
@@ -468,6 +485,8 @@ static const cyaml_schema_field_t top_mapping_schema[] = {
 		"source_auth_file", CYAML_FLAG_POINTER, struct config, source_auth_filename, 0, CYAML_UNLIMITED),
 	CYAML_FIELD_STRING_PTR(
 		"host_auth_file", CYAML_FLAG_POINTER, struct config, host_auth_filename, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_STRING_PTR(
+		"rover_auth_file", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config, rover_auth_filename, 0, CYAML_UNLIMITED),
 	CYAML_FIELD_STRING_PTR(
 		"blocklist_file", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config, blocklist_filename, 0, CYAML_UNLIMITED),
 	CYAML_FIELD_STRING_PTR(
@@ -704,6 +723,19 @@ struct config *config_parse(const char *filename, long long config_gen) {
 				}
 			}
 		}
+		for (int i = 0; i < this->alarms->mountpoints_count; i++) {
+			struct config_alarms_mountpoint *m = &this->alarms->mountpoints[i];
+			for (int j = 0; j < m->alarm_types_count; j++) {
+				int ok = 0;
+				for (unsigned k = 0; k < CYAML_ARRAY_LEN(valid_alarm_types); k++)
+					if (!strcmp(m->alarm_types[j], valid_alarm_types[k])) { ok = 1; break; }
+				if (!ok) {
+					_log(CYAML_LOG_ERROR, "Unknown alarm type \"%s\" for mountpoint %s", m->alarm_types[j], m->mountpoint);
+					config_free(this);
+					return NULL;
+				}
+			}
+		}
 	}
 
 	if (this->threads_count == 0) {
@@ -721,11 +753,43 @@ struct config *config_parse(const char *filename, long long config_gen) {
 	}
 	this->host_auth = NULL;
 	this->source_auth = NULL;
+	this->rover_auth = NULL;
 	this->blocklist = NULL;
 	this->endpoints_json = _endpoints_json(this);
 	this->dyn = NULL;
 	this->free_callback = NULL;
 	return this;
+}
+
+/*
+ * Load a fresh, raw struct from the config file for the Settings API to
+ * mutate and save back -- no DEFAULT_ASSIGN, no REFCNT_INIT, none of the
+ * runtime fields (host_auth, dyn, ...) populated. Never install this as
+ * the live config; it exists only for load-mutate-save-free.
+ */
+struct config *config_load_for_edit(const char *filename) {
+	struct config *edit;
+	cyaml_err_t err = cyaml_load_file(filename, &cyaml_config, &top_schema, (cyaml_data_t **)&edit, NULL);
+	if (err != CYAML_OK)
+		return NULL;
+	return edit;
+}
+
+int config_save_for_edit(const char *filename, struct config *edit) {
+	cyaml_err_t err = cyaml_save_file(filename, &cyaml_config, &top_schema, edit, 0);
+	return err == CYAML_OK ? 0 : -1;
+}
+
+/*
+ * Unlike config_free(), safe to use here: this struct only ever went
+ * through cyaml_load_file(), so freeing exactly the schema-declared fields
+ * cyaml itself allocated (via the same default allocator config_free()
+ * relies on for its own free() calls) is exactly what's needed -- none of
+ * the runtime fields config_free() also has to handle were ever touched.
+ */
+void config_free_edit(struct config *edit) {
+	if (edit)
+		cyaml_free(&cyaml_config, &top_schema, edit, 0);
 }
 
 /*
@@ -806,6 +870,13 @@ void config_free(struct config *this) {
 			free(this->alarms->recipients[i].alarm_types);
 		}
 		free(this->alarms->recipients);
+		for (int i = 0; i < this->alarms->mountpoints_count; i++) {
+			free((char *)this->alarms->mountpoints[i].mountpoint);
+			for (int j = 0; j < this->alarms->mountpoints[i].alarm_types_count; j++)
+				free((char *)this->alarms->mountpoints[i].alarm_types[j]);
+			free(this->alarms->mountpoints[i].alarm_types);
+		}
+		free(this->alarms->mountpoints);
 		free((char *)this->alarms->subject);
 		free((char *)this->alarms->ruckus_path);
 		free((char *)this->alarms->email_template);
@@ -822,6 +893,7 @@ void config_free(struct config *this) {
 	free((char *)this->ui_dir);
 	free((char *)this->host_auth_filename);
 	free((char *)this->source_auth_filename);
+	free((char *)this->rover_auth_filename);
 	free((char *)this->blocklist_filename);
 	free((char *)this->sourcetable_filename);
 	free((char *)this->sidecar_stats_filename);
@@ -832,6 +904,8 @@ void config_free(struct config *this) {
 		auth_free(this->host_auth);
 	if (this->source_auth)
 		auth_free(this->source_auth);
+	if (this->rover_auth)
+		rover_auth_free(this->rover_auth);
 	if (this->blocklist)
 		prefix_table_free(this->blocklist);
 	if (this->endpoints_json)
