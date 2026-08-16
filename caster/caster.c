@@ -739,6 +739,13 @@ caster_reload_auth(struct caster_state *caster, struct config *new_config) {
 		} else
 			r = -1;
 	}
+	if (new_config->rover_auth_filename) {
+		struct rover_auth_entry *tmp = rover_auth_parse(caster, new_config->rover_auth_filename);
+		if (tmp != NULL) {
+			new_config->rover_auth = tmp;
+		} else
+			r = -1;
+	}
 	return r;
 }
 
