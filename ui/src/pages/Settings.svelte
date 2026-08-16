@@ -186,6 +186,9 @@
       payload[`alarms.recipients[${i}].email`] = r.email ?? '';
       payload[`alarms.recipients[${i}].alarm_types`] = (r.alarm_types ?? []).join(',');
     });
+    (a.mountpoints ?? []).forEach((m, i) => {
+      payload[`alarms.mountpoints[${i}].alarm_types`] = (m.alarm_types ?? []).join(',');
+    });
 
     try {
       const res = await apiPost('settings', payload);
@@ -250,6 +253,68 @@
     }
   }
 
+  function mountpointFilterWants(m, key) {
+    return (m.alarm_types ?? []).includes(key);
+  }
+
+  function toggleMountpointFilterType(m, key) {
+    const current = m.alarm_types ?? [];
+    m.alarm_types = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+  }
+
+  let newMountpointName = $state('');
+  let newMountpointTypes = $state([]);
+  let addingMountpointFilter = $state(false);
+  let removingMountpointFilter = $state(null);
+  let mountpointFilterMsg = $state('');
+
+  function toggleNewMountpointType(key) {
+    newMountpointTypes = newMountpointTypes.includes(key)
+      ? newMountpointTypes.filter((k) => k !== key)
+      : [...newMountpointTypes, key];
+  }
+
+  async function addMountpointFilter() {
+    if (!newMountpointName) { mountpointFilterMsg = 'Mountpoint name is required.'; return; }
+    if (newMountpointTypes.length === 0) { mountpointFilterMsg = 'Select at least one alarm type.'; return; }
+    addingMountpointFilter = true;
+    mountpointFilterMsg = '';
+    try {
+      const res = await apiPost('settings', {
+        'alarms.mountpoints.add.mountpoint': newMountpointName,
+        'alarms.mountpoints.add.alarm_types': newMountpointTypes.join(','),
+      });
+      if (res.error) {
+        mountpointFilterMsg = res.error;
+      } else {
+        newMountpointName = '';
+        newMountpointTypes = [];
+        await fetchSettings();
+      }
+    } catch (e) {
+      mountpointFilterMsg = `Failed: ${e.message}`;
+    } finally {
+      addingMountpointFilter = false;
+    }
+  }
+
+  async function removeMountpointFilter(mountpoint) {
+    removingMountpointFilter = mountpoint;
+    mountpointFilterMsg = '';
+    try {
+      const res = await apiPost('settings', { 'alarms.mountpoints.remove': mountpoint });
+      if (res.error) {
+        mountpointFilterMsg = res.error;
+      } else {
+        await fetchSettings();
+      }
+    } catch (e) {
+      mountpointFilterMsg = `Failed: ${e.message}`;
+    } finally {
+      removingMountpointFilter = null;
+    }
+  }
+
   async function changePassword(e) {
     e.preventDefault();
     passwordMsg = '';
@@ -292,6 +357,143 @@
     <p class="loading">Loading…</p>
   {:else}
     <div class="card">
+      <h3>Alarms</h3>
+      {#if !form.alarms}
+        <p class="field-hint">Alarms are not configured. Add an <code>alarms:</code> block to caster.yaml to enable them.</p>
+      {:else}
+        <form onsubmit={(e) => { e.preventDefault(); saveAlarms(); }}>
+          <h4>Thresholds</h4>
+          <div class="grid">
+            {#if form.alarms.station_offline}
+              <label>Station offline after (minutes) <input type="number" bind:value={form.alarms.station_offline.after_minutes} /></label>
+            {/if}
+            {#if form.alarms.station_online}
+              <label>Station online after (minutes) <input type="number" bind:value={form.alarms.station_online.after_minutes} /></label>
+            {/if}
+            {#if form.alarms.low_sv_count}
+              <label>Low SV min sats <input type="number" bind:value={form.alarms.low_sv_count.min_sats} /></label>
+              <label>Low SV after (minutes) <input type="number" bind:value={form.alarms.low_sv_count.after_minutes} /></label>
+            {/if}
+            {#if form.alarms.position_drift}
+              <label>Drift lat threshold (mm) <input type="number" bind:value={form.alarms.position_drift.lat_mm} /></label>
+              <label>Drift lon threshold (mm) <input type="number" bind:value={form.alarms.position_drift.lon_mm} /></label>
+              <label>Drift alt threshold (mm) <input type="number" bind:value={form.alarms.position_drift.alt_mm} /></label>
+              <label>Drift after (minutes) <input type="number" bind:value={form.alarms.position_drift.after_minutes} /></label>
+            {/if}
+          </div>
+          {#if !form.alarms.station_offline && !form.alarms.station_online && !form.alarms.low_sv_count && !form.alarms.position_drift}
+            <p class="field-hint">No alarm types are enabled. Add a threshold block (e.g. station_offline) to caster.yaml to enable one.</p>
+          {/if}
+
+          <h4>Per-base alarm filters</h4>
+          {#if form.alarms.mountpoints.length === 0}
+            <p class="field-hint">No overrides - every mountpoint is checked for every alarm type.</p>
+          {:else}
+            <div class="recipient-list">
+              {#each form.alarms.mountpoints as m, i (i)}
+                <div class="recipient-row">
+                  <span class="mountpoint-name">{m.mountpoint}</span>
+                  <button type="button" class="remove-btn" onclick={() => removeMountpointFilter(m.mountpoint)} disabled={removingMountpointFilter === m.mountpoint}>
+                    {removingMountpointFilter === m.mountpoint ? 'Removing…' : 'Remove'}
+                  </button>
+                </div>
+                <div class="recipient-types">
+                  <span class="field-hint">Checked for:</span>
+                  {#each ALARM_TYPES as t (t.key)}
+                    <label class="checkbox-label">
+                      <input type="checkbox" checked={mountpointFilterWants(m, t.key)} onchange={() => toggleMountpointFilterType(m, t.key)} />
+                      {t.label}
+                    </label>
+                  {/each}
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          <div class="recipient-row recipient-add">
+            <label>Mountpoint <input type="text" bind:value={newMountpointName} /></label>
+          </div>
+          <div class="recipient-types">
+            {#each ALARM_TYPES as t (t.key)}
+              <label class="checkbox-label">
+                <input type="checkbox" checked={newMountpointTypes.includes(t.key)} onchange={() => toggleNewMountpointType(t.key)} />
+                {t.label}
+              </label>
+            {/each}
+            <button type="button" onclick={addMountpointFilter} disabled={addingMountpointFilter}>{addingMountpointFilter ? 'Adding…' : '+ Add filter'}</button>
+          </div>
+          {#if mountpointFilterMsg}<div class="msg">{mountpointFilterMsg}</div>{/if}
+
+          <h4>Recipients</h4>
+          {#if form.alarms.recipients.length === 0}
+            <p class="field-hint">No recipients configured.</p>
+          {:else}
+            <div class="recipient-list">
+              {#each form.alarms.recipients as r, i (i)}
+                <div class="recipient-row">
+                  <label>Name <input type="text" bind:value={r.name} /></label>
+                  <label>Email <input type="text" bind:value={r.email} /></label>
+                  <button type="button" class="remove-btn" onclick={() => removeRecipient(i)} disabled={removingIndex === i}>
+                    {removingIndex === i ? 'Removing…' : 'Remove'}
+                  </button>
+                </div>
+                <div class="recipient-types">
+                  <span class="field-hint">Receives:</span>
+                  {#each ALARM_TYPES as t (t.key)}
+                    <label class="checkbox-label">
+                      <input type="checkbox" checked={recipientWants(r, t.key)} onchange={() => toggleRecipientType(r, t.key)} />
+                      {t.label}
+                    </label>
+                  {/each}
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          <div class="recipient-row recipient-add">
+            <label>New name (optional) <input type="text" bind:value={newRecipientName} /></label>
+            <label>New email <input type="text" bind:value={newRecipientEmail} /></label>
+            <button type="button" onclick={addRecipient} disabled={addingRecipient}>{addingRecipient ? 'Adding…' : '+ Add recipient'}</button>
+          </div>
+          {#if recipientMsg}<div class="msg">{recipientMsg}</div>{/if}
+
+          <div class="grid">
+            <label>Subject <input type="text" bind:value={form.alarms.subject} /></label>
+            <label>Min interval between sends (minutes) <input type="number" bind:value={form.alarms.min_interval_minutes} /></label>
+          </div>
+
+          <div class="grid">
+            <label>Ruckus binary path <input type="text" bind:value={form.alarms.ruckus_path} /></label>
+            <label>Email template path <input type="text" bind:value={form.alarms.email_template} /></label>
+          </div>
+
+          {#if form.alarms.smtp}
+            <h4>SMTP</h4>
+            <div class="grid">
+              <label>Host <input type="text" bind:value={form.alarms.smtp.host} /></label>
+              <label>Port <input type="number" bind:value={form.alarms.smtp.port} /></label>
+              <label>
+                TLS
+                <select bind:value={form.alarms.smtp.tls}>
+                  {#each TLS_OPTIONS as opt}<option value={opt}>{opt}</option>{/each}
+                </select>
+              </label>
+              <label>
+                Auth file <input type="text" bind:value={form.alarms.smtp.auth_file} />
+                <span class="field-hint">Credentials are managed on the Auth page.</span>
+              </label>
+            </div>
+          {/if}
+
+          <div class="card-actions">
+            <button type="submit" disabled={savingSection === 'alarms'}>{savingSection === 'alarms' ? 'Saving…' : 'Save'}</button>
+            {#if sectionMsg.alarms}<span class="msg">{sectionMsg.alarms}</span>{/if}
+          </div>
+        </form>
+      {/if}
+    </div>
+
+    <div class="card">
       <h3>Admin password</h3>
       <form onsubmit={changePassword}>
         <div class="grid">
@@ -333,102 +535,6 @@
         </form>
       </div>
     {/each}
-
-    <div class="card">
-      <h3>Alarms</h3>
-      {#if !form.alarms}
-        <p class="field-hint">Alarms are not configured. Add an <code>alarms:</code> block to caster.yaml to enable them.</p>
-      {:else}
-        <form onsubmit={(e) => { e.preventDefault(); saveAlarms(); }}>
-          <div class="grid">
-            <label>Subject <input type="text" bind:value={form.alarms.subject} /></label>
-            <label>Min interval between sends (minutes) <input type="number" bind:value={form.alarms.min_interval_minutes} /></label>
-            <label>Ruckus binary path <input type="text" bind:value={form.alarms.ruckus_path} /></label>
-            <label>Email template path <input type="text" bind:value={form.alarms.email_template} /></label>
-          </div>
-
-          {#if form.alarms.smtp}
-            <h4>SMTP</h4>
-            <div class="grid">
-              <label>Host <input type="text" bind:value={form.alarms.smtp.host} /></label>
-              <label>Port <input type="number" bind:value={form.alarms.smtp.port} /></label>
-              <label>
-                TLS
-                <select bind:value={form.alarms.smtp.tls}>
-                  {#each TLS_OPTIONS as opt}<option value={opt}>{opt}</option>{/each}
-                </select>
-              </label>
-              <label>
-                Auth file <input type="text" bind:value={form.alarms.smtp.auth_file} />
-                <span class="field-hint">Credential filename, not the credential itself.</span>
-              </label>
-            </div>
-          {/if}
-
-          <h4>Recipients</h4>
-          {#if form.alarms.recipients.length === 0}
-            <p class="field-hint">No recipients configured.</p>
-          {:else}
-            <div class="recipient-list">
-              {#each form.alarms.recipients as r, i (i)}
-                <div class="recipient-row">
-                  <label>Name <input type="text" bind:value={r.name} /></label>
-                  <label>Email <input type="text" bind:value={r.email} /></label>
-                  <button type="button" class="remove-btn" onclick={() => removeRecipient(i)} disabled={removingIndex === i}>
-                    {removingIndex === i ? 'Removing…' : 'Remove'}
-                  </button>
-                </div>
-                <div class="recipient-types">
-                  <span class="field-hint">Receives:</span>
-                  {#each ALARM_TYPES as t (t.key)}
-                    <label class="checkbox-label">
-                      <input type="checkbox" checked={recipientWants(r, t.key)} onchange={() => toggleRecipientType(r, t.key)} />
-                      {t.label}
-                    </label>
-                  {/each}
-                </div>
-              {/each}
-            </div>
-          {/if}
-          <span class="field-hint">Edits to existing recipients above are saved with the button below. Adding or removing takes effect immediately.</span>
-
-          <div class="recipient-row recipient-add">
-            <label>New name (optional) <input type="text" bind:value={newRecipientName} /></label>
-            <label>New email <input type="text" bind:value={newRecipientEmail} /></label>
-            <button type="button" onclick={addRecipient} disabled={addingRecipient}>{addingRecipient ? 'Adding…' : '+ Add recipient'}</button>
-          </div>
-          {#if recipientMsg}<div class="msg">{recipientMsg}</div>{/if}
-
-          <h4>Thresholds</h4>
-          <div class="grid">
-            {#if form.alarms.station_offline}
-              <label>Station offline after (minutes) <input type="number" bind:value={form.alarms.station_offline.after_minutes} /></label>
-            {/if}
-            {#if form.alarms.station_online}
-              <label>Station online after (minutes) <input type="number" bind:value={form.alarms.station_online.after_minutes} /></label>
-            {/if}
-            {#if form.alarms.low_sv_count}
-              <label>Low SV min sats <input type="number" bind:value={form.alarms.low_sv_count.min_sats} /></label>
-              <label>Low SV after (minutes) <input type="number" bind:value={form.alarms.low_sv_count.after_minutes} /></label>
-            {/if}
-            {#if form.alarms.position_drift}
-              <label>Drift lat threshold (mm) <input type="number" bind:value={form.alarms.position_drift.lat_mm} /></label>
-              <label>Drift lon threshold (mm) <input type="number" bind:value={form.alarms.position_drift.lon_mm} /></label>
-              <label>Drift alt threshold (mm) <input type="number" bind:value={form.alarms.position_drift.alt_mm} /></label>
-              <label>Drift after (minutes) <input type="number" bind:value={form.alarms.position_drift.after_minutes} /></label>
-            {/if}
-          </div>
-          {#if !form.alarms.station_offline && !form.alarms.station_online && !form.alarms.low_sv_count && !form.alarms.position_drift}
-            <p class="field-hint">No alarm types are enabled. Add a threshold block (e.g. station_offline) to caster.yaml to enable one.</p>
-          {/if}
-
-          <div class="card-actions">
-            <button type="submit" disabled={savingSection === 'alarms'}>{savingSection === 'alarms' ? 'Saving…' : 'Save'}</button>
-            {#if sectionMsg.alarms}<span class="msg">{sectionMsg.alarms}</span>{/if}
-          </div>
-        </form>
-      {/if}
-    </div>
   {/if}
 </div>
 
@@ -521,6 +627,15 @@
 
   .recipient-row button {
     flex-shrink: 0;
+  }
+
+  .mountpoint-name {
+    flex: 1;
+    min-width: 0;
+    font-family: monospace;
+    font-variant-numeric: tabular-nums;
+    color: #e2e8f0;
+    align-self: center;
   }
 
   .remove-btn {
