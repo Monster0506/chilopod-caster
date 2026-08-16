@@ -44,14 +44,13 @@ Building Chilopod from source requires a C compiler, `make`, and Go 1.24 or newe
 |---|---|
 | libevent2 | (any recent) |
 | libcyaml | (any recent) |
-| libyaml | (any recent) |
 | json-c | 0.16 |
 | openssl | 3.0.15 |
 
 A minimal Debian/Ubuntu install has neither a compiler nor these libraries by default. Install them with apt:
 
 ```sh
-sudo apt install build-essential libcyaml-dev libyaml-dev libevent-dev libjson-c-dev libssl-dev
+sudo apt install build-essential libcyaml-dev libevent-dev libjson-c-dev libssl-dev
 ```
 
 Debian and Ubuntu's `golang-go` package is often older than 1.24. Check with `go version`, and if it reports an older version, install Go from the official tarball instead (check [go.dev/dl](https://go.dev/dl/) for the current release):
@@ -434,6 +433,21 @@ The path to the host authentication file (`host.auth`). This file holds the cred
 
 Format: `HOST:username:password`
 
+### `rover_auth_file`
+
+Optional. The path to the rover authentication file. When set, any `GET` request for an actual RTCM stream (a real mountpoint or the virtual NEAR base) must present a username and password (HTTP Basic-Auth) matching an enabled entry in this file, or the caster replies `401`. The sourcetable itself (`GET /`) always stays open, with or without this setting.
+
+Format: one entry per line, as `username:password:Y` or `username:password:N` -- the third field enables or disables that account without deleting it.
+
+```
+# abc can log in
+abc:abc:Y
+# temporarily revoked, entry kept for later re-enabling
+oldrover:somepassword:N
+```
+
+Leaving this setting unset keeps RTCM streams open to any client, with no credentials required -- Chilopod's behavior before this setting existed.
+
 ### `admin_user`
 
 The key that the caster looks up in `source_auth_file` to authenticate `/adm` API requests. The default value is `admin`.
@@ -570,13 +584,19 @@ alarms:
   recipients:
     - name: Ops                # optional display name
       email: ops@example.com
+      alarm_types: [station_offline, low_sv_count]  # optional -- omit for every alarm type
+  mountpoints:
+    - mountpoint: BASE1
+      alarm_types: [station_offline]  # BASE1 is only ever evaluated for this type
   subject: Chilopod Alarm      # optional, default "Chilopod Alarm"
   min_interval_minutes: 15     # optional, default 15
   ruckus_path: /usr/local/sbin/ruckus   # optional, default shown
+  email_template: alarm-email.html      # optional, default shown
 
   station_offline:
     after_minutes: 5
-  station_online: {}
+  station_online:
+    after_minutes: 0           # optional, default 0 -- {} is shorthand for this
   low_sv_count:
     min_sats: 9
     after_minutes: 2
@@ -590,6 +610,12 @@ alarms:
 `smtp.auth_file` follows the same `host:username:password` format as [`host_auth_file`](#host_auth_file), keeping credentials out of `caster.yaml`. Omit it entirely to send through an unauthenticated relay, for example a local Postfix or Exim in relay-only mode -- Chilopod does not require or assume any specific email provider.
 
 `ruckus_path` must point at a built [`ruckus`](#alarm-notifications-ruckus) binary. If it does not exist or fails to run, Chilopod logs the failure and records it at `GET /adm/api/v1/alarms`; it does not retry beyond what `ruckus` itself does internally.
+
+`email_template` is the path to the HTML template used to build the notification email body (see [Alarm Notifications](#alarm-notifications-ruckus) for the `{{PLACEHOLDER}}` format). Falls back to the plain-text summary if the file can't be read.
+
+`recipients[].alarm_types` restricts one recipient to a subset of alarm types (`station_offline`, `station_online`, `low_sv_count`, `position_drift`). Omit it and that recipient gets every type. If an alarm type ends up with zero subscribed recipients, Chilopod records the outcome at `GET /adm/api/v1/alarms` (`sent: false`) without spawning `ruckus` at all.
+
+`mountpoints[].alarm_types` restricts which alarm types even get *evaluated* for one mountpoint, using the same type names as `recipients[].alarm_types`. A mountpoint absent from this list, or listed with `alarm_types` omitted, is checked against every type (the default). Unlike the recipient-level filter, this gates detection itself -- a suppressed type never starts accumulating threshold state for that mountpoint and never appears in its `GET /adm/api/v1/alarms` history at all, not even as an unsent entry.
 
 Admin API
 =========
