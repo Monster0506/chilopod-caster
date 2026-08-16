@@ -66,3 +66,58 @@ struct auth_entry *auth_lookup(struct auth_entry *auth, const char *key) {
 struct auth_entry *auth_lookupi(struct auth_entry *auth, const char *key) {
 	return _auth_lookup(auth, key, 1);
 }
+
+/*
+ * Read the rover (NTRIP GET client) account file: "user:password:Y" or
+ * "user:password:N" lines, third field case-insensitive, any value other
+ * than Y/1/yes/true treated as disabled.
+ */
+struct rover_auth_entry *rover_auth_parse(struct caster_state *caster, const char *filename) {
+	struct parsed_file *p;
+	p = file_parse(caster->config_dir, filename, 3, ":", 0, &caster->flog);
+
+	if (p == NULL) {
+		logfmt(&caster->flog, LOG_ERR, "Can't read or parse %s", filename);
+		return NULL;
+	}
+	struct rover_auth_entry *auth = (struct rover_auth_entry *)malloc(sizeof(struct rover_auth_entry)*(p->nlines+1));
+
+	if (auth == NULL) {
+		file_free(p);
+		return NULL;
+	}
+
+	int n;
+	for (n = 0; n < p->nlines; n++) {
+		auth[n].user = mystrdup(p->pls[n][0]);
+		auth[n].password = mystrdup(p->pls[n][1]);
+		char *e = p->pls[n][2];
+		auth[n].enabled = !strcasecmp(e, "Y") || !strcasecmp(e, "yes") || !strcasecmp(e, "true") || !strcmp(e, "1");
+	}
+	auth[n].user = NULL;
+	auth[n].password = NULL;
+	auth[n].enabled = 0;
+	file_free(p);
+	return auth;
+}
+
+void rover_auth_free(struct rover_auth_entry *this) {
+	struct rover_auth_entry *p = this;
+	if (this == NULL)
+		return;
+	while (p->user) {
+		strfree((char *)p->user);
+		strfree((char *)p->password);
+		p++;
+	}
+	free(this);
+}
+
+struct rover_auth_entry *rover_auth_lookup(struct rover_auth_entry *auth, const char *user) {
+	while (auth->user != NULL) {
+		if (!strcmp(auth->user, user))
+			return auth;
+		auth++;
+	}
+	return NULL;
+}

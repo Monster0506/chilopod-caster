@@ -16,4 +16,18 @@ void auth_free(struct auth_entry *this);
 struct auth_entry *auth_lookup(struct auth_entry *auth, const char *key);
 struct auth_entry *auth_lookupi(struct auth_entry *auth, const char *key);
 
+/*
+ * Entry for a rover (NTRIP GET client) account: unlike auth_entry, a
+ * disabled entry stays on file so it can be re-enabled without retyping
+ * the password.
+ */
+struct rover_auth_entry {
+	const char *user;
+	const char *password;
+	int enabled;
+};
+struct rover_auth_entry *rover_auth_parse(struct caster_state *caster, const char *filename);
+void rover_auth_free(struct rover_auth_entry *this);
+struct rover_auth_entry *rover_auth_lookup(struct rover_auth_entry *auth, const char *user);
+
 #endif
