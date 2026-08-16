@@ -2,6 +2,7 @@
 *.d
 *.core
 caster/caster
+caster/caster-*
 caster/tests
 
 cmake-build-*/
