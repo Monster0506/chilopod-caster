@@ -223,6 +223,22 @@ int check_password(struct ntrip_state *this, const char *mountpoint, const char 
 }
 
 /*
+ * Check a GET (rover) client's credentials against the rover auth list.
+ * Returns 1 if user/passwd match an enabled entry, 0 otherwise. Callers
+ * check config->rover_auth_filename separately to know whether rover
+ * authentication is enabled at all.
+ */
+static int check_rover_password(struct ntrip_state *this, const char *user, const char *passwd) {
+	struct rover_auth_entry *auth = this->config->rover_auth;
+	if (auth == NULL || user == NULL || passwd == NULL)
+		return 0;
+	struct rover_auth_entry *e = rover_auth_lookup(auth, user);
+	if (e == NULL || !e->enabled)
+		return 0;
+	return !strcmp(e->password, passwd);
+}
+
+/*
  * Do rate limit checks then run ntripsrv_redo_virtual_pos()
  * if adequate.
  *
@@ -596,6 +612,15 @@ void ntripsrv_readcb(struct bufferevent *bev, void *arg) {
 					int subscribe_ok = 0;
 
 					if (*mountpoint) {
+						/*
+						 * Sourcetable requests (empty mountpoint) stay unauthenticated;
+						 * an actual RTCM stream needs a valid, enabled rover account
+						 * when rover authentication is configured at all.
+						 */
+						if (config->rover_auth_filename && !check_rover_password(st, st->user, st->password)) {
+							err = 401;
+							break;
+						}
 						if (config->dyn->rtcm_filter && rtcm_filter_check_mountpoint(config->dyn, mountpoint))
 							atomic_store(&st->use_rtcm_filter, 1);
 						/*
