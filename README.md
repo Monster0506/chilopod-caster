@@ -44,13 +44,14 @@ Building Chilopod from source requires a C compiler, `make`, and Go 1.24 or newe
 |---|---|
 | libevent2 | (any recent) |
 | libcyaml | (any recent) |
+| libyaml | (any recent) |
 | json-c | 0.16 |
 | openssl | 3.0.15 |
 
 A minimal Debian/Ubuntu install has neither a compiler nor these libraries by default. Install them with apt:
 
 ```sh
-sudo apt install build-essential libcyaml-dev libevent-dev libjson-c-dev libssl-dev
+sudo apt install build-essential libcyaml-dev libyaml-dev libevent-dev libjson-c-dev libssl-dev
 ```
 
 Debian and Ubuntu's `golang-go` package is often older than 1.24. Check with `go version`, and if it reports an older version, install Go from the official tarball instead (check [go.dev/dl](https://go.dev/dl/) for the current release):
