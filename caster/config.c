@@ -362,11 +362,18 @@ static const cyaml_schema_field_t alarms_smtp_fields_schema[] = {
 	CYAML_FIELD_END
 };
 
+static const cyaml_schema_value_t alarms_recipient_alarm_type_schema = {
+	CYAML_VALUE_STRING(CYAML_FLAG_POINTER, const char *, 0, CYAML_UNLIMITED)
+};
+
 static const cyaml_schema_field_t alarms_recipient_fields_schema[] = {
 	CYAML_FIELD_STRING_PTR(
 		"name", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL, struct config_alarms_recipient, name, 0, CYAML_UNLIMITED),
 	CYAML_FIELD_STRING_PTR(
 		"email", CYAML_FLAG_POINTER, struct config_alarms_recipient, email, 0, CYAML_UNLIMITED),
+	CYAML_FIELD_SEQUENCE(
+		"alarm_types", CYAML_FLAG_POINTER|CYAML_FLAG_OPTIONAL,
+		struct config_alarms_recipient, alarm_types, &alarms_recipient_alarm_type_schema, 0, CYAML_UNLIMITED),
 	CYAML_FIELD_END
 };
 
@@ -679,6 +686,24 @@ struct config *config_parse(const char *filename, long long config_gen) {
 			config_free(this);
 			return NULL;
 		}
+
+		/* Must match alarm_event_names[] in alarms.c */
+		static const char *valid_alarm_types[] = {
+			"station_offline", "station_online", "low_sv_count", "position_drift"
+		};
+		for (int i = 0; i < this->alarms->recipients_count; i++) {
+			struct config_alarms_recipient *r = &this->alarms->recipients[i];
+			for (int j = 0; j < r->alarm_types_count; j++) {
+				int ok = 0;
+				for (unsigned k = 0; k < CYAML_ARRAY_LEN(valid_alarm_types); k++)
+					if (!strcmp(r->alarm_types[j], valid_alarm_types[k])) { ok = 1; break; }
+				if (!ok) {
+					_log(CYAML_LOG_ERROR, "Unknown alarm type \"%s\" for recipient %s", r->alarm_types[j], r->email);
+					config_free(this);
+					return NULL;
+				}
+			}
+		}
 	}
 
 	if (this->threads_count == 0) {
@@ -776,6 +801,9 @@ void config_free(struct config *this) {
 		for (int i = 0; i < this->alarms->recipients_count; i++) {
 			free((char *)this->alarms->recipients[i].name);
 			free((char *)this->alarms->recipients[i].email);
+			for (int j = 0; j < this->alarms->recipients[i].alarm_types_count; j++)
+				free((char *)this->alarms->recipients[i].alarm_types[j]);
+			free(this->alarms->recipients[i].alarm_types);
 		}
 		free(this->alarms->recipients);
 		free((char *)this->alarms->subject);

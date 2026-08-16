@@ -167,6 +167,8 @@ struct config_alarms_smtp {
 struct config_alarms_recipient {
 	const char *name;	// optional, display name
 	const char *email;
+	const char **alarm_types;	// optional; NULL = every alarm type
+	int alarm_types_count;
 };
 
 /* Threshold shared by station_offline / station_online */

@@ -58,13 +58,23 @@ static int alarm_rate_ok(struct alarm_mountpoint_state *state, enum alarm_event_
 	return timeval_diff_minutes(now, last) >= min_interval_minutes;
 }
 
+/* NULL alarm_types means "every alarm type" (the default, unfiltered). */
+static int recipient_wants(struct config_alarms_recipient *r, enum alarm_event_type type) {
+	if (!r->alarm_types)
+		return 1;
+	for (int i = 0; i < r->alarm_types_count; i++)
+		if (!strcmp(r->alarm_types[i], alarm_event_names[type]))
+			return 1;
+	return 0;
+}
+
 /*
  * Build the JSON payload for one ruckus invocation. Reads the SMTP auth
  * file fresh each time (alarms fire rarely enough that this cost doesn't
  * matter), so credentials are never cached longer than a single send.
  */
 static char *build_ruckus_payload(struct caster_state *caster, struct config_alarms *alarms,
-		const char *subject, const char *body) {
+		enum alarm_event_type type, const char *subject, const char *body) {
 	json_object *j = json_object_new_object();
 	json_object *jsmtp = json_object_new_object();
 
@@ -100,8 +110,10 @@ static char *build_ruckus_payload(struct caster_state *caster, struct config_ala
 	json_object_object_add_ex(j, "smtp", jsmtp, JSON_C_CONSTANT_NEW);
 	json_object_object_add_ex(j, "from", json_object_new_string(from), JSON_C_CONSTANT_NEW);
 
-	json_object *jto = json_object_new_array_ext(alarms->recipients_count);
+	json_object *jto = json_object_new_array();
 	for (int i = 0; i < alarms->recipients_count; i++) {
+		if (!recipient_wants(&alarms->recipients[i], type))
+			continue;
 		json_object *r = json_object_new_object();
 		json_object_object_add_ex(r, "name", json_object_new_string(alarms->recipients[i].name ? alarms->recipients[i].name : ""), JSON_C_CONSTANT_NEW);
 		json_object_object_add_ex(r, "email", json_object_new_string(alarms->recipients[i].email), JSON_C_CONSTANT_NEW);
@@ -424,6 +436,16 @@ static void fire_alarm(struct caster_state *caster, struct config_alarms *alarms
 	char subject[256];
 	snprintf(subject, sizeof subject, "%s: %s - %s", alarms->subject, mountpoint, summary);
 
+	int any_recipient = 0;
+	for (int i = 0; i < alarms->recipients_count; i++)
+		if (recipient_wants(&alarms->recipients[i], type)) { any_recipient = 1; break; }
+	if (!any_recipient) {
+		logfmt(&caster->flog, LOG_INFO, "alarm: no recipients subscribed to %s, skipping send for %s",
+			alarm_event_names[type], mountpoint);
+		alarm_ring_add(caster, mountpoint, type, summary, 0, -1, "no recipients subscribed to this alarm type");
+		return;
+	}
+
 	/*
 	 * The ring buffer / API always get the plain-text body (see below via
 	 * spawn_ruckus's summary arg). The email itself gets the HTML template
@@ -433,7 +455,7 @@ static void fire_alarm(struct caster_state *caster, struct config_alarms *alarms
 	char *html_body = build_html_body(caster, alarms, type, mountpoint, body);
 	const char *email_body = html_body ? html_body : body;
 
-	char *payload = build_ruckus_payload(caster, alarms, subject, email_body);
+	char *payload = build_ruckus_payload(caster, alarms, type, subject, email_body);
 	free(html_body);
 	if (!payload) {
 		logfmt(&caster->flog, LOG_ERR, "alarm: failed to build payload for %s %s", mountpoint, alarm_event_names[type]);
