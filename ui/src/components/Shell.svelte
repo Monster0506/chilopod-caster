@@ -6,6 +6,7 @@
   import Map from '../pages/Map.svelte';
   import Log from '../pages/Log.svelte';
   import Settings from '../pages/Settings.svelte';
+  import Auth from '../pages/Auth.svelte';
 
   let { onLogout } = $props();
 
@@ -17,6 +18,7 @@
     map:         Map,
     log:         Log,
     settings:    Settings,
+    auth:        Auth,
   };
 
   const navItems = [
@@ -25,6 +27,7 @@
     { id: 'map',         label: 'Map' },
     { id: 'log',         label: 'Log' },
     { id: 'settings',    label: 'Settings' },
+    { id: 'auth',        label: 'Auth' },
   ];
 
   function logout() {
