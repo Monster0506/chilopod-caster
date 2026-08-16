@@ -84,7 +84,7 @@
   }
 
   function rovers(net) {
-    return Object.values(net).filter(c => c.type === 'client');
+    return Object.values(net).filter(c => c.type === 'client' && c.gga != null);
   }
 
   $effect(() => {

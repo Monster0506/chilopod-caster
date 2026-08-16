@@ -86,7 +86,7 @@
           ? Object.values(net).find((c) => (c.type === 'source' || c.type === 'source_fetcher') && c.mountpoint === key) ?? null
           : null;
         const subscribers = net
-          ? Object.values(net).filter((c) => c.type === 'client' && (c.mountpoint === key || c.assigned_base === key)).length
+          ? Object.values(net).filter((c) => c.type === 'client' && c.gga != null && (c.mountpoint === key || c.assigned_base === key)).length
           : 0;
         return { key, ...m, live, subscribers };
       });
@@ -94,7 +94,7 @@
 
   function rovers() {
     if (!net) return [];
-    return Object.values(net).filter((c) => c.type === 'client');
+    return Object.values(net).filter((c) => c.type === 'client' && c.gga != null);
   }
 
   function roverPositions() {
