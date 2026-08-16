@@ -68,11 +68,20 @@ static int recipient_wants(struct config_alarms_recipient *r, enum alarm_event_t
 	return 0;
 }
 
-/*
- * Build the JSON payload for one ruckus invocation. Reads the SMTP auth
- * file fresh each time (alarms fire rarely enough that this cost doesn't
- * matter), so credentials are never cached longer than a single send.
- */
+static int mountpoint_wants(struct config_alarms *alarms, const char *mountpoint, enum alarm_event_type type) {
+	for (int i = 0; i < alarms->mountpoints_count; i++) {
+		if (strcmp(alarms->mountpoints[i].mountpoint, mountpoint))
+			continue;
+		if (!alarms->mountpoints[i].alarm_types)
+			return 1;
+		for (int j = 0; j < alarms->mountpoints[i].alarm_types_count; j++)
+			if (!strcmp(alarms->mountpoints[i].alarm_types[j], alarm_event_names[type]))
+				return 1;
+		return 0;
+	}
+	return 1;
+}
+
 static char *build_ruckus_payload(struct caster_state *caster, struct config_alarms *alarms,
 		enum alarm_event_type type, const char *subject, const char *body) {
 	json_object *j = json_object_new_object();
@@ -156,11 +165,6 @@ static char *read_whole_file(const char *config_dir, const char *filename) {
 	return buf;
 }
 
-/*
- * Return a new string with every occurrence of needle replaced by
- * replacement. Templates and placeholders here are small, so this
- * straightforward O(n*m) approach is fine -- no need for anything cleverer.
- */
 static char *str_replace_all(const char *haystack, const char *needle, const char *replacement) {
 	size_t needle_len = strlen(needle);
 	size_t replacement_len = strlen(replacement);
@@ -202,11 +206,6 @@ static const struct alarm_type_style alarm_type_styles[ALARM_EVENT_TYPE_COUNT] =
 	[ALARM_POSITION_DRIFT] = { "Position Drift", "#a855f7", "#faf5ff" },
 };
 
-/*
- * Fill the HTML email template for one alert. Returns NULL (falling back to
- * the plain-text summary as the email body) if the template can't be read --
- * a missing/misconfigured template file should degrade, not drop the alert.
- */
 static char *build_html_body(struct caster_state *caster, struct config_alarms *alarms,
 		enum alarm_event_type type, const char *mountpoint, const char *summary) {
 	char *tmpl = read_whole_file(caster->config_dir, alarms->email_template);
@@ -349,12 +348,6 @@ static void alarms_sigchld_cb(evutil_socket_t fd, short event, void *arg) {
 	}
 }
 
-/*
- * Fork+exec ruckus as a one-shot subprocess, write the JSON payload to its
- * stdin, and register async tracking for its completion. Never blocks the
- * event loop -- the caller gets control back as soon as the (small,
- * pipe-buffer-sized) payload write completes.
- */
 static void spawn_ruckus(struct caster_state *caster, const char *ruckus_path,
 		const char *mountpoint, enum alarm_event_type type, const char *payload, const char *summary) {
 	int stdin_pipe[2], stderr_pipe[2];
@@ -446,12 +439,6 @@ static void fire_alarm(struct caster_state *caster, struct config_alarms *alarms
 		return;
 	}
 
-	/*
-	 * The ring buffer / API always get the plain-text body (see below via
-	 * spawn_ruckus's summary arg). The email itself gets the HTML template
-	 * filled with that same text, falling back to the plain text untouched
-	 * if the template file can't be read.
-	 */
 	char *html_body = build_html_body(caster, alarms, type, mountpoint, body);
 	const char *email_body = html_body ? html_body : body;
 
@@ -465,10 +452,6 @@ static void fire_alarm(struct caster_state *caster, struct config_alarms *alarms
 	strfree(payload);
 }
 
-/*
- * Evaluate all four alarm conditions for one mountpoint and fire any that
- * have crossed their threshold and aren't currently rate-limited.
- */
 static void alarms_check_one(struct caster_state *caster, struct config_alarms *alarms,
 		const char *mountpoint, pos_t *declared_pos, struct timeval *now, json_object *sidecar_stats) {
 	struct alarm_mountpoint_state *state =
@@ -485,7 +468,7 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 
 	/* station_offline / station_online */
 	if (is_live) {
-		if (state->was_live == 0 && alarms->station_online
+		if (state->was_live == 0 && alarms->station_online && mountpoint_wants(alarms, mountpoint, ALARM_STATION_ONLINE)
 				&& alarm_rate_ok(state, ALARM_STATION_ONLINE, now, alarms->min_interval_minutes)) {
 			char body[256];
 			snprintf(body, sizeof body, "Station %s is back online.", mountpoint);
@@ -496,7 +479,7 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 	} else {
 		if (state->offline_since.tv_sec == 0)
 			state->offline_since = *now;
-		if (alarms->station_offline) {
+		if (alarms->station_offline && mountpoint_wants(alarms, mountpoint, ALARM_STATION_OFFLINE)) {
 			double minutes_down = timeval_diff_minutes(now, &state->offline_since);
 			if (minutes_down >= alarms->station_offline->after_minutes
 					&& alarm_rate_ok(state, ALARM_STATION_OFFLINE, now, alarms->min_interval_minutes)) {
@@ -510,7 +493,7 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 	state->was_live = is_live;
 
 	/* low_sv_count */
-	if (alarms->low_sv_count && sidecar_stats) {
+	if (alarms->low_sv_count && mountpoint_wants(alarms, mountpoint, ALARM_LOW_SV) && sidecar_stats) {
 		json_object *sc, *jsv;
 		if (json_object_object_get_ex(sidecar_stats, mountpoint, &sc)
 				&& json_object_object_get_ex(sc, "satellite_count", &jsv)) {
@@ -534,7 +517,7 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 	}
 
 	/* position_drift */
-	if (alarms->position_drift) {
+	if (alarms->position_drift && mountpoint_wants(alarms, mountpoint, ALARM_POSITION_DRIFT)) {
 		struct config_alarms_position_drift *pd = alarms->position_drift;
 		int triggered = 0;
 		char reason[256] = "";
@@ -589,11 +572,6 @@ static void alarms_tick_cb(evutil_socket_t fd, short event, void *arg) {
 	struct timeval now;
 	gettimeofday(&now, NULL);
 
-	/*
-	 * Snapshot local mountpoint names + declared positions while holding
-	 * the sourcetable lock, then release it before doing any per-station
-	 * checking (which does its own, independent locking, and can fork).
-	 */
 	struct alarm_candidate *candidates = NULL;
 	int ncandidates = 0;
 
