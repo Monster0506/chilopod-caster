@@ -239,6 +239,13 @@ static int check_rover_password(struct ntrip_state *this, const char *user, cons
 }
 
 /*
+ * Rover authentication never applies to loopback connections
+ */
+static int rover_auth_exempt_peer(struct ntrip_state *this) {
+	return !strcmp(this->remote_addr, "127.0.0.1") || !strcmp(this->remote_addr, "::1");
+}
+
+/*
  * Do rate limit checks then run ntripsrv_redo_virtual_pos()
  * if adequate.
  *
@@ -612,43 +619,21 @@ void ntripsrv_readcb(struct bufferevent *bev, void *arg) {
 					int subscribe_ok = 0;
 
 					if (*mountpoint) {
-						/*
-						 * Sourcetable requests (empty mountpoint) stay unauthenticated;
-						 * an actual RTCM stream needs a valid, enabled rover account
-						 * when rover authentication is configured at all.
-						 */
-						if (config->rover_auth_filename && !check_rover_password(st, st->user, st->password)) {
+						if (config->rover_auth_filename && !check_rover_password(st, st->user, st->password)
+								&& !rover_auth_exempt_peer(st)) {
 							err = 401;
 							break;
 						}
 						if (config->dyn->rtcm_filter && rtcm_filter_check_mountpoint(config->dyn, mountpoint))
 							atomic_store(&st->use_rtcm_filter, 1);
-						/*
-						 * Find both a relevant source line and a live source (actually live or on-demand).
-						 */
 						sourceline = stack_find_mountpoint(st->caster, &st->caster->sourcetablestack, mountpoint);
 
-						//
-						// Don't subscribe to a livesource with the same name as the sourceline
-						// if the latter indicates the source is virtual: this would cause an assertion failure later
-						// in livesource_add_subcriber().
-						//
-						// This can happen after a sourcetable reload, where a configuration changes a given mountpoint
-						// from a regular source to a virtual source, including when using wildcards, ahd the previous
-						// livesource is still active.
-						//
 						if (sourceline == NULL || !sourceline->virtual)
 							subscribe_ok = livesource_find_and_subscribe(st->caster, st, mountpoint, NULL, 1, sourceline?sourceline->on_demand:0);
 						else
 							subscribe_ok = 0;
 					}
 
-					/*
-					 * Source not found either in the sourcetables or as a live source:
-					 * reply with the sourcetable in NTRIP1, error 404 in NTRIP2.
-					 *
-					 * Empty mountpoint name: always reply with the sourcetable.
-					 */
 					if (*mountpoint == '\0' || (!sourceline && !subscribe_ok && st->client_version == 1)) {
 						st->type = "client";
 						err = ntripsrv_send_sourcetable(st, output);
@@ -679,7 +664,6 @@ void ntripsrv_readcb(struct bufferevent *bev, void *arg) {
 					}
 					st->type = "client";
 
-					/* Regular NTRIP stream client: set a read timeout to check for data sent */
 					struct timeval read_timeout = { config->idle_max_delay+1, 0 };
 					bufferevent_set_timeouts(bev, &read_timeout, NULL);
 
