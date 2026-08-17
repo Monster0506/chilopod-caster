@@ -193,10 +193,14 @@ Running
 ```sh
 #!/bin/sh
 /usr/local/sbin/sidecar -caster 127.0.0.1:2101 -out /usr/local/etc/chilopod/mountpoints.json -poll 30s &
-exec /usr/local/sbin/caster
+SIDECAR_PID=$!
+trap 'kill "$SIDECAR_PID" 2>/dev/null' EXIT INT TERM
+/usr/local/sbin/caster
 ```
 
-The wrapper starts the sidecar in the background, then execs the caster in the foreground. This gives systemd one process to track. The caster runs here without `-d`, since a `Type=simple` unit expects its `ExecStart` process to stay in the foreground rather than fork and detach.
+The wrapper starts the sidecar in the background, then runs the caster in the foreground. The wrapper sets a trap for the exit signal. The trap kills the sidecar when caster stops. The caster runs without the `-d` flag here. A `Type=simple` unit requires its `ExecStart` process to stay in the foreground. The process must not fork or detach.
+
+The `Type=simple` unit uses the default `KillMode=control-group` setting. This setting sends the stop signal to every process in the cgroup of the unit: the wrapper, caster, and sidecar. The command `systemctl status` shows the wrapper as `MainPID`, not caster. `Restart=on-failure` still works, because the wrapper's exit status matches caster's exit status.
 
 Create `/etc/systemd/system/caster.service`:
 
