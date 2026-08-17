@@ -103,6 +103,20 @@
     }
   }
 
+  let mountpointNames = $state([]);
+
+  async function fetchMountpointNames() {
+    try {
+      const tables = await apiGet('sourcetables');
+      const local = tables.find((t) => t.host === 'LOCAL') ?? { mountpoints: {} };
+      mountpointNames = Object.entries(local.mountpoints)
+        .filter(([, mnt]) => !mnt.virtual)
+        .map(([name]) => name);
+    } catch (e) {
+      // Non-critical -- the filter form still works without autocomplete.
+    }
+  }
+
   async function saveSection(section) {
     savingSection = section.key;
     sectionMsg = { ...sectionMsg, [section.key]: '' };
@@ -343,6 +357,7 @@
   }
 
   fetchSettings();
+  fetchMountpointNames();
 </script>
 
 <div class="page">
@@ -411,7 +426,13 @@
           {/if}
 
           <div class="recipient-row recipient-add">
-            <label>Mountpoint <input type="text" bind:value={newMountpointName} /></label>
+            <label>
+              Mountpoint
+              <input type="text" bind:value={newMountpointName} list="mountpoint-names" />
+              <datalist id="mountpoint-names">
+                {#each mountpointNames as name (name)}<option value={name}></option>{/each}
+              </datalist>
+            </label>
           </div>
           <div class="recipient-types">
             {#each ALARM_TYPES as t (t.key)}
