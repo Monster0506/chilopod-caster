@@ -1,0 +1,14 @@
+@LOG_DIR@/*.log {
+	daily
+	rotate 14
+	maxsize 1G
+	compress
+	delaycompress
+	missingok
+	notifempty
+	sharedscripts
+	create 0644 root root
+	postrotate
+		killall -HUP caster 2>/dev/null || true
+	endscript
+}
