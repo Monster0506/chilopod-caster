@@ -697,8 +697,6 @@ struct config *config_parse(const char *filename, long long config_gen) {
 			this->alarms->smtp->port = default_config_alarms_smtp.port;
 		if (this->alarms->station_offline && !this->alarms->station_offline->after_minutes)
 			this->alarms->station_offline->after_minutes = default_config_alarms_threshold.after_minutes;
-		if (this->alarms->station_online && !this->alarms->station_online->after_minutes)
-			this->alarms->station_online->after_minutes = default_config_alarms_threshold.after_minutes;
 
 		if (this->alarms->low_sv_count && !this->sidecar_stats_filename) {
 			_log(CYAML_LOG_ERROR, "alarms.low_sv_count is enabled but no sidecar_stats_file is configured");
