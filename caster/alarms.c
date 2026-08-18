@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,6 +48,35 @@ static void alarm_mountpoint_state_free(void *p) {
 
 static double timeval_diff_minutes(struct timeval *now, struct timeval *since) {
 	return (now->tv_sec - since->tv_sec) / 60.0;
+}
+
+static const struct { const char *json_name; const char *abbrev; } constellation_names[] = {
+	{ "GPS", "GPS" }, { "GLONASS", "GLO" }, { "Galileo", "GAL" },
+	{ "BeiDou", "BDS" }, { "QZSS", "QZS" }, { "SBAS", "SBAS" },
+};
+
+/* Build "8GPS+6GLO+6GAL+7BDS" from the sidecar's per-mountpoint "constellations"
+ * object. Leaves out unchanged if that key isn't present. */
+static void build_constellation_summary(json_object *sc, char *out, size_t cap) {
+	out[0] = '\0';
+	json_object *jconst;
+	if (!json_object_object_get_ex(sc, "constellations", &jconst))
+		return;
+	for (unsigned i = 0; i < sizeof(constellation_names) / sizeof(constellation_names[0]); i++) {
+		json_object *jcount;
+		if (!json_object_object_get_ex(jconst, constellation_names[i].json_name, &jcount))
+			continue;
+		char part[24];
+		snprintf(part, sizeof part, "%s%d%s", out[0] ? "+" : "", json_object_get_int(jcount), constellation_names[i].abbrev);
+		strncat(out, part, cap - strlen(out) - 1);
+	}
+}
+
+/* Append "; axis Xmm (limit Ymm)" to a position_drift reason string. */
+static void append_drift_reason(char *reason, size_t cap, const char *axis, double drift_mm, int limit_mm) {
+	char part[96];
+	snprintf(part, sizeof part, "%s%s %.0fmm (limit %dmm)", reason[0] ? "; " : "", axis, drift_mm, limit_mm);
+	strncat(reason, part, cap - strlen(reason) - 1);
 }
 
 /* True if this alarm type hasn't fired recently enough to be rate-limited */
@@ -488,8 +518,11 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 			double minutes_up = online_enabled ? timeval_diff_minutes(now, &state->online_since) : 0;
 			if (!online_enabled || minutes_up >= alarms->station_online->after_minutes) {
 				if (online_enabled && alarm_rate_ok(state, ALARM_STATION_ONLINE, now, alarms->min_interval_minutes)) {
+					double minutes_outage = state->offline_since.tv_sec ? timeval_diff_minutes(now, &state->offline_since) : 0;
 					char body[256];
-					snprintf(body, sizeof body, "Station %s is back online.", mountpoint);
+					snprintf(body, sizeof body,
+						"Station %s is back online after an outage of %.0f minutes, and has now been back online for %.0f minutes.",
+						mountpoint, minutes_outage, minutes_up);
 					if (fire_alarm(caster, alarms, mountpoint, ALARM_STATION_ONLINE, "back online", body))
 						state->last_sent[ALARM_STATION_ONLINE] = *now;
 				}
@@ -526,10 +559,22 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 				double minutes = timeval_diff_minutes(now, &state->low_sv_since);
 				if (minutes >= alarms->low_sv_count->after_minutes
 						&& alarm_rate_ok(state, ALARM_LOW_SV, now, alarms->min_interval_minutes)) {
-					char body[256];
-					snprintf(body, sizeof body,
-						"Station %s is tracking only %d satellites (threshold %d) for %.0f minutes.",
-						mountpoint, sv, alarms->low_sv_count->min_sats, minutes);
+					char constellations[96];
+					build_constellation_summary(sc, constellations, sizeof constellations);
+
+					char body[350];
+					snprintf(body, sizeof body, "Station %s is tracking only %d satellites", mountpoint, sv);
+					size_t len = strlen(body);
+					if (constellations[0]) {
+						snprintf(body + len, sizeof body - len, " (%s)", constellations);
+						len = strlen(body);
+					}
+					snprintf(body + len, sizeof body - len, " (threshold %d) for %.0f minutes.", alarms->low_sv_count->min_sats, minutes);
+					len = strlen(body);
+					json_object *jlat;
+					if (json_object_object_get_ex(sc, "latency_ms", &jlat))
+						snprintf(body + len, sizeof body - len, " Sidecar latency %" PRId64 "ms.", (int64_t)json_object_get_int64(jlat));
+
 					if (fire_alarm(caster, alarms, mountpoint, ALARM_LOW_SV, "low satellite count", body))
 						state->last_sent[ALARM_LOW_SV] = *now;
 				}
@@ -549,13 +594,15 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 		if (rp) {
 			if (pd->lat_mm > 0 && rp->has_lat_lon_drift && rp->avg_lat_drift_mm > pd->lat_mm) {
 				triggered = 1;
-				snprintf(reason, sizeof reason, "latitude drift %.0fmm exceeds %dmm", rp->avg_lat_drift_mm, pd->lat_mm);
-			} else if (pd->lon_mm > 0 && rp->has_lat_lon_drift && rp->avg_lon_drift_mm > pd->lon_mm) {
+				append_drift_reason(reason, sizeof reason, "latitude", rp->avg_lat_drift_mm, pd->lat_mm);
+			}
+			if (pd->lon_mm > 0 && rp->has_lat_lon_drift && rp->avg_lon_drift_mm > pd->lon_mm) {
 				triggered = 1;
-				snprintf(reason, sizeof reason, "longitude drift %.0fmm exceeds %dmm", rp->avg_lon_drift_mm, pd->lon_mm);
-			} else if (pd->alt_mm > 0 && rp->has_baseline_alt && rp->avg_alt_drift_mm > pd->alt_mm) {
+				append_drift_reason(reason, sizeof reason, "longitude", rp->avg_lon_drift_mm, pd->lon_mm);
+			}
+			if (pd->alt_mm > 0 && rp->has_baseline_alt && rp->avg_alt_drift_mm > pd->alt_mm) {
 				triggered = 1;
-				snprintf(reason, sizeof reason, "altitude drift %.0fmm exceeds %dmm", rp->avg_alt_drift_mm, pd->alt_mm);
+				append_drift_reason(reason, sizeof reason, "altitude", rp->avg_alt_drift_mm, pd->alt_mm);
 			}
 		}
 		P_RWLOCK_UNLOCK(&caster->rtcm_lock);
@@ -566,8 +613,8 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 			double minutes = timeval_diff_minutes(now, &state->drift_since);
 			if (minutes >= pd->after_minutes
 					&& alarm_rate_ok(state, ALARM_POSITION_DRIFT, now, alarms->min_interval_minutes)) {
-				char body[300];
-				snprintf(body, sizeof body, "Station %s position drift: %s.", mountpoint, reason);
+				char body[350];
+				snprintf(body, sizeof body, "Station %s position drift: %s. Ongoing for %.0f minutes.", mountpoint, reason, minutes);
 				if (fire_alarm(caster, alarms, mountpoint, ALARM_POSITION_DRIFT, "position drift", body))
 					state->last_sent[ALARM_POSITION_DRIFT] = *now;
 			}
