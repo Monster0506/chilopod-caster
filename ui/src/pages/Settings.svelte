@@ -162,6 +162,11 @@
   function toggleRecipientType(r, key) {
     const current = r.alarm_types ?? ALARM_TYPES.map((t) => t.key);
     const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+    if (next.length === 0) {
+      recipientMsg = 'A recipient must receive at least one alarm type -- use Remove to delete it instead.';
+      return;
+    }
+    recipientMsg = '';
     r.alarm_types = next.length === ALARM_TYPES.length ? null : next;
   }
 
@@ -273,7 +278,13 @@
 
   function toggleMountpointFilterType(m, key) {
     const current = m.alarm_types ?? [];
-    m.alarm_types = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+    const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+    if (next.length === 0) {
+      mountpointFilterMsg = 'A mountpoint filter must keep at least one alarm type checked -- use Remove to delete it instead.';
+      return;
+    }
+    mountpointFilterMsg = '';
+    m.alarm_types = next;
   }
 
   let newMountpointName = $state('');
