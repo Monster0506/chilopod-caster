@@ -1,7 +1,9 @@
 <script>
-  import { apiGet, apiPost } from '../lib/api.js';
+  import { apiGet, apiPost, isAdmin } from '../lib/api.js';
   import { ggaQualityColor, ggaQualityLabel } from '../lib/gga.js';
   import { pushToast } from '../lib/toast.js';
+
+  const admin = isAdmin();
 
   const HISTORY_MAX = 20;
   const POLL_MS = 5000;
@@ -227,11 +229,13 @@
 <div class="page">
   <div class="header">
     <h2>Dashboard</h2>
-    <div class="reload-wrap">
-      <button onclick={reload} disabled={reloading}>
-        {reloading ? 'Reloading…' : 'Reload Config'}
-      </button>
-    </div>
+    {#if admin}
+      <div class="reload-wrap">
+        <button onclick={reload} disabled={reloading}>
+          {reloading ? 'Reloading…' : 'Reload Config'}
+        </button>
+      </div>
+    {/if}
   </div>
 
   {#if error}
