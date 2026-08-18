@@ -1,6 +1,6 @@
 <script>
   import { router } from '../lib/router.js';
-  import { getCredentials, clearCredentials } from '../lib/api.js';
+  import { getCredentials, clearCredentials, isAdmin } from '../lib/api.js';
   import Toast from '../lib/Toast.svelte';
   import Dashboard from '../pages/Dashboard.svelte';
   import Connections from '../pages/Connections.svelte';
@@ -12,14 +12,14 @@
   let { onLogout } = $props();
 
   const { user } = getCredentials();
+  const admin = isAdmin();
 
   const pages = {
     dashboard:   Dashboard,
     connections: Connections,
     map:         Map,
     log:         Log,
-    settings:    Settings,
-    auth:        Auth,
+    ...(admin ? { settings: Settings, auth: Auth } : {}),
   };
 
   const navItems = [
@@ -27,9 +27,12 @@
     { id: 'connections', label: 'Connections' },
     { id: 'map',         label: 'Map' },
     { id: 'log',         label: 'Log' },
-    { id: 'settings',    label: 'Settings' },
-    { id: 'auth',        label: 'Auth' },
+    ...(admin ? [{ id: 'settings', label: 'Settings' }, { id: 'auth', label: 'Auth' }] : []),
   ];
+
+  $effect(() => {
+    if (!pages[$router]) router.go('dashboard');
+  });
 
   function logout() {
     clearCredentials();
