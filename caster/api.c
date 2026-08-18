@@ -757,9 +757,8 @@ struct mime_content *api_settings_get_json(struct caster_state *caster, struct r
 			json_object_object_add_ex(jsmtp, "auth_file",
 				a->smtp->auth_file ? json_object_new_string(a->smtp->auth_file) : json_object_new_null(), JSON_C_CONSTANT_NEW);
 			/*
-			 * List the auth_file's entries (host + user, never the
-			 * password) so the UI can manage them the same way it manages
-			 * rover accounts.
+			 * List the auth_file's entries so the UI can manage them the
+			 * same way it manages rover accounts and source_auth.
 			 */
 			json_object *jcreds = json_object_new_array();
 			if (a->smtp->auth_file) {
@@ -769,6 +768,7 @@ struct mime_content *api_settings_get_json(struct caster_state *caster, struct r
 						json_object *jc = json_object_new_object();
 						json_object_object_add_ex(jc, "host", json_object_new_string(e->key), JSON_C_CONSTANT_NEW);
 						json_object_object_add_ex(jc, "user", json_object_new_string(e->user), JSON_C_CONSTANT_NEW);
+						json_object_object_add_ex(jc, "password", json_object_new_string(e->password), JSON_C_CONSTANT_NEW);
 						json_object_array_add(jcreds, jc);
 					}
 					auth_free(entries);
@@ -862,6 +862,7 @@ struct mime_content *api_settings_get_json(struct caster_state *caster, struct r
 		for (struct rover_auth_entry *e = config->rover_auth; e->user; e++) {
 			json_object *ja2 = json_object_new_object();
 			json_object_object_add_ex(ja2, "user", json_object_new_string(e->user), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(ja2, "password", json_object_new_string(e->password), JSON_C_CONSTANT_NEW);
 			json_object_object_add_ex(ja2, "enabled", json_object_new_boolean(e->enabled), JSON_C_CONSTANT_NEW);
 			json_object_array_add(jaccounts, ja2);
 		}

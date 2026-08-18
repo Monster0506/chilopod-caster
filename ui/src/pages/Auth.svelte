@@ -17,6 +17,22 @@
     }
   }
 
+  let revealedRoverUsers = $state(new Set());
+  function toggleRoverReveal(user) {
+    const next = new Set(revealedRoverUsers);
+    if (next.has(user)) next.delete(user);
+    else next.add(user);
+    revealedRoverUsers = next;
+  }
+
+  let revealedSmtpHosts = $state(new Set());
+  function toggleSmtpReveal(host) {
+    const next = new Set(revealedSmtpHosts);
+    if (next.has(host)) next.delete(host);
+    else next.add(host);
+    revealedSmtpHosts = next;
+  }
+
   let roverAuthFilenameInput = $state('');
   let savingRoverAuthFilename = $state(false);
   let newRoverUser = $state('');
@@ -208,6 +224,11 @@
                   <input type="checkbox" checked={a.enabled} onchange={() => toggleRoverAccount(a)} />
                   {a.user}
                 </label>
+                <span class="mono">
+                  <button type="button" class="reveal-btn" onclick={() => toggleRoverReveal(a.user)} title={revealedRoverUsers.has(a.user) ? 'Click to hide' : 'Click to reveal'}>
+                    {revealedRoverUsers.has(a.user) ? a.password : '••••••••'}
+                  </button>
+                </span>
                 <label>New password <input type="text" bind:value={roverPasswordInputs[a.user]} placeholder="(unchanged)" /></label>
                 <button type="button" onclick={() => setRoverPassword(a.user)} disabled={!roverPasswordInputs[a.user] || settingRoverPasswordUser === a.user}>
                   {settingRoverPasswordUser === a.user ? 'Saving…' : 'Set password'}
@@ -243,6 +264,11 @@
               <div class="recipient-row">
                 <span class="mountpoint-name">{c.host}</span>
                 <span class="field-hint">{c.user}</span>
+                <span class="mono">
+                  <button type="button" class="reveal-btn" onclick={() => toggleSmtpReveal(c.host)} title={revealedSmtpHosts.has(c.host) ? 'Click to hide' : 'Click to reveal'}>
+                    {revealedSmtpHosts.has(c.host) ? c.password : '••••••••'}
+                  </button>
+                </span>
                 <button type="button" class="remove-btn" onclick={() => removeSmtpAuthCredential(c.host)} disabled={removingSmtpAuthHost === c.host}>
                   {removingSmtpAuthHost === c.host ? 'Removing…' : 'Remove'}
                 </button>
@@ -353,6 +379,25 @@
     font-variant-numeric: tabular-nums;
     color: #e2e8f0;
     align-self: center;
+  }
+
+  .mono {
+    font-family: monospace;
+    color: #e2e8f0;
+  }
+
+  .reveal-btn {
+    padding: 0;
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    font-family: monospace;
+    cursor: pointer;
+  }
+
+  .reveal-btn:hover {
+    color: #93c5fd;
   }
 
   .remove-btn {
