@@ -44,6 +44,7 @@ alarms:
   recipients:
   - name: TJ
     email: tjraklovits@gmail.com
+  mountpoints: []
   subject: Chilopod Alarm
   min_interval_minutes: 15
   ruckus_path: /mnt/c/Users/TJ/Documents/Code/github/chilopod-caster/ruckus/ruckus
@@ -52,9 +53,6 @@ alarms:
     after_minutes: 5
   station_online:
     after_minutes: 0
-  low_sv_count:
-    min_sats: 9
-    after_minutes: 2
   position_drift:
     lat_mm: 50
     lon_mm: 50
