@@ -19,5 +19,6 @@ struct mime_content *api_detect_source_json(struct caster_state *caster, struct 
 struct mime_content *api_edit_source_json(struct caster_state *caster, struct request *req);
 struct mime_content *api_near_json(struct caster_state *caster, struct request *req);
 struct mime_content *api_alarms_json(struct caster_state *caster, struct request *req);
+struct mime_content *api_whoami_json(struct caster_state *caster, struct request *req);
 
 #endif

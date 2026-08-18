@@ -9,6 +9,7 @@
 #include <json-c/json_tokener.h>
 
 #include "alarms.h"
+#include "auth.h"
 #include "conf.h"
 #include "livesource.h"
 #include "nodes.h"
@@ -870,6 +871,29 @@ struct mime_content *api_settings_get_json(struct caster_state *caster, struct r
 	json_object_object_add_ex(jrover, "accounts", jaccounts, JSON_C_CONSTANT_NEW);
 	json_object_object_add_ex(j, "rover_auth", jrover, JSON_C_CONSTANT_NEW);
 
+	/*
+	 * /adm console accounts (beyond the single admin_user bootstrap account).
+	 * Passwords are write-only -- never echoed back, same policy as above.
+	 */
+	json_object *juser = json_object_new_object();
+	json_object_object_add_ex(juser, "configured", json_object_new_boolean(config->user_auth_filename != NULL), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(juser, "filename",
+		config->user_auth_filename ? json_object_new_string(config->user_auth_filename) : json_object_new_null(),
+		JSON_C_CONSTANT_NEW);
+	json_object *juseraccounts = json_object_new_array();
+	if (config->user_auth) {
+		for (struct user_auth_entry *e = config->user_auth; e->user; e++) {
+			json_object *ja2 = json_object_new_object();
+			json_object_object_add_ex(ja2, "user", json_object_new_string(e->user), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(ja2, "password", json_object_new_string(e->password), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(ja2, "role", json_object_new_string(e->role), JSON_C_CONSTANT_NEW);
+			json_object_object_add_ex(ja2, "enabled", json_object_new_boolean(e->enabled), JSON_C_CONSTANT_NEW);
+			json_object_array_add(juseraccounts, ja2);
+		}
+	}
+	json_object_object_add_ex(juser, "accounts", juseraccounts, JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "user_auth", juser, JSON_C_CONSTANT_NEW);
+
 	char *s = mystrdup(json_object_to_json_string(j));
 	struct mime_content *m = mime_new(s, -1, "application/json", 1);
 	json_object_put(j);
@@ -902,6 +926,7 @@ static const struct top_field_def TOP_FIELDS[] = {
 	TOPFIELD("host_auth_filename", host_auth_filename, SFT_STRING),
 	TOPFIELD("source_auth_filename", source_auth_filename, SFT_STRING),
 	TOPFIELD("rover_auth_filename", rover_auth_filename, SFT_STRING),
+	TOPFIELD("user_auth_filename", user_auth_filename, SFT_STRING),
 	TOPFIELD("blocklist_filename", blocklist_filename, SFT_STRING),
 	TOPFIELD("sourcetable_filename", sourcetable_filename, SFT_STRING),
 	TOPFIELD("sidecar_stats_filename", sidecar_stats_filename, SFT_STRING),
@@ -1203,6 +1228,79 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 			int r = set_colon_file_field(caster->config_dir, config->rover_auth_filename, ':', ra_pw_user, 1, ra_pw_value);
 			if (r <= 0)
 				return api_error_json(r < 0 ? "cannot rewrite rover_auth_filename" : "that rover user isn't present in the config file");
+			changed = 1;
+		}
+	}
+
+	/* user_auth.* fields operate on the separate user_auth_filename text
+	 * file, same shape as rover_auth above, plus a role column. */
+	if (config->user_auth_filename) {
+		char *ua_add_user = (char *)hash_table_get(req->hash, "user_auth.add.user");
+		if (ua_add_user) {
+			char *ua_add_password = (char *)hash_table_get(req->hash, "user_auth.add.password");
+			char *ua_add_role = (char *)hash_table_get(req->hash, "user_auth.add.role");
+			if (!*ua_add_user || !field_is_safe(ua_add_user))
+				return api_error_json("invalid or empty user_auth.add.user");
+			if (!ua_add_password || !*ua_add_password || !field_is_safe(ua_add_password))
+				return api_error_json("invalid or empty user_auth.add.password");
+			if (!ua_add_role || (strcmp(ua_add_role, "admin") && strcmp(ua_add_role, "viewer")))
+				return api_error_json("user_auth.add.role must be admin or viewer");
+			if (config->user_auth && user_auth_lookup(config->user_auth, ua_add_user))
+				return api_error_json("that console user already exists");
+			FILE *f = fopen_absolute(caster->config_dir, config->user_auth_filename, "a");
+			if (f == NULL)
+				return api_error_json("cannot open user_auth_filename");
+			fprintf(f, "%s:%s:%s:Y\n", ua_add_user, ua_add_password, ua_add_role);
+			fclose(f);
+			changed = 1;
+		}
+
+		char *ua_remove = (char *)hash_table_get(req->hash, "user_auth.remove");
+		if (ua_remove) {
+			if (!field_is_safe(ua_remove))
+				return api_error_json("invalid characters in user_auth.remove");
+			int r = remove_matching_lines(caster->config_dir, config->user_auth_filename, ':', 0, ua_remove);
+			if (r <= 0)
+				return api_error_json(r < 0 ? "cannot rewrite user_auth_filename" : "that console user isn't present in the config file");
+			changed = 1;
+		}
+
+		char *ua_enable_user = (char *)hash_table_get(req->hash, "user_auth.set_enabled.user");
+		if (ua_enable_user) {
+			char *ua_enable_value = (char *)hash_table_get(req->hash, "user_auth.set_enabled.value");
+			if (!field_is_safe(ua_enable_user))
+				return api_error_json("invalid characters in user_auth.set_enabled.user");
+			if (!ua_enable_value || (strcasecmp(ua_enable_value, "Y") && strcasecmp(ua_enable_value, "N")))
+				return api_error_json("user_auth.set_enabled.value must be Y or N");
+			int r = set_colon_file_field(caster->config_dir, config->user_auth_filename, ':', ua_enable_user, 3, ua_enable_value);
+			if (r <= 0)
+				return api_error_json(r < 0 ? "cannot rewrite user_auth_filename" : "that console user isn't present in the config file");
+			changed = 1;
+		}
+
+		char *ua_pw_user = (char *)hash_table_get(req->hash, "user_auth.set_password.user");
+		if (ua_pw_user) {
+			char *ua_pw_value = (char *)hash_table_get(req->hash, "user_auth.set_password.value");
+			if (!field_is_safe(ua_pw_user))
+				return api_error_json("invalid characters in user_auth.set_password.user");
+			if (!ua_pw_value || !*ua_pw_value || !field_is_safe(ua_pw_value))
+				return api_error_json("invalid or empty user_auth.set_password.value");
+			int r = set_colon_file_field(caster->config_dir, config->user_auth_filename, ':', ua_pw_user, 1, ua_pw_value);
+			if (r <= 0)
+				return api_error_json(r < 0 ? "cannot rewrite user_auth_filename" : "that console user isn't present in the config file");
+			changed = 1;
+		}
+
+		char *ua_role_user = (char *)hash_table_get(req->hash, "user_auth.set_role.user");
+		if (ua_role_user) {
+			char *ua_role_value = (char *)hash_table_get(req->hash, "user_auth.set_role.value");
+			if (!field_is_safe(ua_role_user))
+				return api_error_json("invalid characters in user_auth.set_role.user");
+			if (!ua_role_value || (strcmp(ua_role_value, "admin") && strcmp(ua_role_value, "viewer")))
+				return api_error_json("user_auth.set_role.value must be admin or viewer");
+			int r = set_colon_file_field(caster->config_dir, config->user_auth_filename, ':', ua_role_user, 2, ua_role_value);
+			if (r <= 0)
+				return api_error_json(r < 0 ? "cannot rewrite user_auth_filename" : "that console user isn't present in the config file");
 			changed = 1;
 		}
 	}
@@ -1842,6 +1940,20 @@ struct mime_content *api_near_json(struct caster_state *caster, struct request *
 
 struct mime_content *api_alarms_json(struct caster_state *caster, struct request *req) {
 	json_object *j = alarms_ring_json(caster);
+	char *s = mystrdup(json_object_to_json_string(j));
+	struct mime_content *m = mime_new(s, -1, "application/json", 1);
+	json_object_put(j);
+	return m;
+}
+
+struct mime_content *api_whoami_json(struct caster_state *caster, struct request *req) {
+	const char *user = req->st->user;
+	if (!user && req->hash)
+		user = hash_table_get(req->hash, "user");
+
+	json_object *j = json_object_new_object();
+	json_object_object_add_ex(j, "user", user ? json_object_new_string(user) : json_object_new_null(), JSON_C_CONSTANT_NEW);
+	json_object_object_add_ex(j, "role", json_object_new_string(admin_role_name(req->st->admin_role)), JSON_C_CONSTANT_NEW);
 	char *s = mystrdup(json_object_to_json_string(j));
 	struct mime_content *m = mime_new(s, -1, "application/json", 1);
 	json_object_put(j);
