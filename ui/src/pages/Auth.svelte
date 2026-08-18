@@ -164,6 +164,125 @@
     }
   }
 
+  const ROLES = [
+    { key: 'viewer', label: 'Viewer' },
+    { key: 'admin', label: 'Admin' },
+  ];
+
+  let userAuthFilenameInput = $state('');
+  let savingUserAuthFilename = $state(false);
+  let newConsoleUser = $state('');
+  let newConsolePassword = $state('');
+  let newConsoleRole = $state('viewer');
+  let addingConsoleUser = $state(false);
+  let removingConsoleUser = $state(null);
+  let consolePasswordInputs = $state({});
+  let settingConsolePasswordUser = $state(null);
+
+  async function enableUserAuth() {
+    if (!userAuthFilenameInput) { pushToast('Filename is required.', 'error'); return; }
+    savingUserAuthFilename = true;
+    try {
+      const res = await apiPost('settings', { user_auth_filename: userAuthFilenameInput });
+      if (res.error) {
+        pushToast(res.error, 'error');
+      } else {
+        pushToast('Enabled. Add at least one admin or viewer account below.');
+        await fetchSettings();
+      }
+    } catch (e) {
+      pushToast(`Failed: ${e.message}`, 'error');
+    } finally {
+      savingUserAuthFilename = false;
+    }
+  }
+
+  async function addConsoleUser() {
+    if (!newConsoleUser || !newConsolePassword) { pushToast('Username and password are both required.', 'error'); return; }
+    addingConsoleUser = true;
+    try {
+      const res = await apiPost('settings', {
+        'user_auth.add.user': newConsoleUser,
+        'user_auth.add.password': newConsolePassword,
+        'user_auth.add.role': newConsoleRole,
+      });
+      if (res.error) {
+        pushToast(res.error, 'error');
+      } else {
+        newConsoleUser = '';
+        newConsolePassword = '';
+        newConsoleRole = 'viewer';
+        await fetchSettings();
+      }
+    } catch (e) {
+      pushToast(`Failed: ${e.message}`, 'error');
+    } finally {
+      addingConsoleUser = false;
+    }
+  }
+
+  async function removeConsoleUser(user) {
+    removingConsoleUser = user;
+    try {
+      const res = await apiPost('settings', { 'user_auth.remove': user });
+      if (res.error) {
+        pushToast(res.error, 'error');
+      } else {
+        await fetchSettings();
+      }
+    } catch (e) {
+      pushToast(`Failed: ${e.message}`, 'error');
+    } finally {
+      removingConsoleUser = null;
+    }
+  }
+
+  async function toggleConsoleUser(account) {
+    const next = !account.enabled;
+    try {
+      const res = await apiPost('settings', { 'user_auth.set_enabled.user': account.user, 'user_auth.set_enabled.value': next ? 'Y' : 'N' });
+      if (res.error) {
+        pushToast(res.error, 'error');
+      } else {
+        await fetchSettings();
+      }
+    } catch (e) {
+      pushToast(`Failed: ${e.message}`, 'error');
+    }
+  }
+
+  async function setConsoleRole(user, role) {
+    try {
+      const res = await apiPost('settings', { 'user_auth.set_role.user': user, 'user_auth.set_role.value': role });
+      if (res.error) {
+        pushToast(res.error, 'error');
+      } else {
+        await fetchSettings();
+      }
+    } catch (e) {
+      pushToast(`Failed: ${e.message}`, 'error');
+    }
+  }
+
+  async function setConsolePassword(user) {
+    const value = consolePasswordInputs[user];
+    if (!value) return;
+    settingConsolePasswordUser = user;
+    try {
+      const res = await apiPost('settings', { 'user_auth.set_password.user': user, 'user_auth.set_password.value': value });
+      if (res.error) {
+        pushToast(res.error, 'error');
+      } else {
+        consolePasswordInputs = { ...consolePasswordInputs, [user]: '' };
+        pushToast(`Password updated for ${user}.`);
+      }
+    } catch (e) {
+      pushToast(`Failed: ${e.message}`, 'error');
+    } finally {
+      settingConsolePasswordUser = null;
+    }
+  }
+
   fetchSettings();
 </script>
 
@@ -256,6 +375,65 @@
           <button type="button" onclick={setSmtpAuthCredential} disabled={savingSmtpAuth}>{savingSmtpAuth ? 'Saving…' : 'Set credential'}</button>
         </div>
         <span class="field-hint">Setting a host that already has a credential replaces it.</span>
+      {/if}
+    </div>
+
+    <div class="card">
+      <h3>Console Users</h3>
+      {#if !form.user_auth?.configured}
+        <p class="field-hint">Not configured. Only the single <code>admin_user</code> account can sign in. Set an auth file to add more admin or view-only accounts.</p>
+        <div class="grid">
+          <label>Console auth file <input type="text" bind:value={userAuthFilenameInput} placeholder="user.auth" /></label>
+        </div>
+        <div class="card-actions">
+          <button type="button" onclick={enableUserAuth} disabled={savingUserAuthFilename}>
+            {savingUserAuthFilename ? 'Enabling…' : 'Enable'}
+          </button>
+        </div>
+      {:else}
+        <p class="field-hint">Auth file: <code>{form.user_auth.filename}</code></p>
+
+        {#if form.user_auth.accounts.length > 0}
+          <div class="recipient-list">
+            {#each form.user_auth.accounts as a (a.user)}
+              <div class="recipient-row">
+                <label class="checkbox-label">
+                  <Switch checked={a.enabled} onchange={() => toggleConsoleUser(a)} />
+                  {a.user}
+                </label>
+                <span class="mono">
+                  <RevealSecret value={a.password} />
+                </span>
+                <label>
+                  Role
+                  <select value={a.role} onchange={(e) => setConsoleRole(a.user, e.currentTarget.value)}>
+                    {#each ROLES as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
+                  </select>
+                </label>
+                <label>New password <input type="text" bind:value={consolePasswordInputs[a.user]} placeholder="(unchanged)" /></label>
+                <button type="button" onclick={() => setConsolePassword(a.user)} disabled={!consolePasswordInputs[a.user] || settingConsolePasswordUser === a.user}>
+                  {settingConsolePasswordUser === a.user ? 'Saving…' : 'Set password'}
+                </button>
+                <button type="button" class="remove-btn" onclick={() => removeConsoleUser(a.user)} disabled={removingConsoleUser === a.user}>
+                  {removingConsoleUser === a.user ? 'Removing…' : 'Remove'}
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        <div class="recipient-row recipient-add">
+          <label>New username <input type="text" bind:value={newConsoleUser} /></label>
+          <label>New password <input type="text" bind:value={newConsolePassword} /></label>
+          <label>
+            Role
+            <select bind:value={newConsoleRole}>
+              {#each ROLES as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
+            </select>
+          </label>
+          <button type="button" onclick={addConsoleUser} disabled={addingConsoleUser}>{addingConsoleUser ? 'Adding…' : '+ Add account'}</button>
+        </div>
+        <span class="field-hint">The <code>admin_user</code> account in caster.yaml keeps working as-is and can't be removed here.</span>
       {/if}
     </div>
   {/if}
