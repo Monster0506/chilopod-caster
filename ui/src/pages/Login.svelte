@@ -13,11 +13,12 @@
     error = '';
     loading = true;
     try {
-      const res = await fetch('/adm/api/v1/mem', {
+      const res = await fetch('/adm/api/v1/whoami', {
         headers: { Authorization: `Basic ${btoa(`${user}:${password}`)}` },
       });
       if (res.ok) {
-        setCredentials(user, password);
+        const { role } = await res.json();
+        setCredentials(user, password, role);
         onLogin();
       } else if (res.status === 401) {
         error = 'Invalid credentials.';
