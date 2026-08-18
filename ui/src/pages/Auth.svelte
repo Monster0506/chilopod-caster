@@ -2,6 +2,7 @@
   import { apiGet, apiPost } from '../lib/api.js';
   import RevealSecret from '../lib/RevealSecret.svelte';
   import Switch from '../lib/Switch.svelte';
+  import { pushToast } from '../lib/toast.js';
 
   let form = $state({});
   let error = $state('');
@@ -27,42 +28,39 @@
   let removingRoverUser = $state(null);
   let roverPasswordInputs = $state({});
   let settingRoverPasswordUser = $state(null);
-  let roverAuthMsg = $state('');
 
   async function enableRoverAuth() {
-    if (!roverAuthFilenameInput) { roverAuthMsg = 'Filename is required.'; return; }
+    if (!roverAuthFilenameInput) { pushToast('Filename is required.', 'error'); return; }
     savingRoverAuthFilename = true;
-    roverAuthMsg = '';
     try {
       const res = await apiPost('settings', { rover_auth_filename: roverAuthFilenameInput });
       if (res.error) {
-        roverAuthMsg = res.error;
+        pushToast(res.error, 'error');
       } else {
-        roverAuthMsg = 'Enabled. Add at least one account below - until then, every rover request is rejected.';
+        pushToast('Enabled. Add at least one account below - until then, every rover request is rejected.');
         await fetchSettings();
       }
     } catch (e) {
-      roverAuthMsg = `Failed: ${e.message}`;
+      pushToast(`Failed: ${e.message}`, 'error');
     } finally {
       savingRoverAuthFilename = false;
     }
   }
 
   async function addRoverAccount() {
-    if (!newRoverUser || !newRoverPassword) { roverAuthMsg = 'Username and password are both required.'; return; }
+    if (!newRoverUser || !newRoverPassword) { pushToast('Username and password are both required.', 'error'); return; }
     addingRoverAccount = true;
-    roverAuthMsg = '';
     try {
       const res = await apiPost('settings', { 'rover_auth.add.user': newRoverUser, 'rover_auth.add.password': newRoverPassword });
       if (res.error) {
-        roverAuthMsg = res.error;
+        pushToast(res.error, 'error');
       } else {
         newRoverUser = '';
         newRoverPassword = '';
         await fetchSettings();
       }
     } catch (e) {
-      roverAuthMsg = `Failed: ${e.message}`;
+      pushToast(`Failed: ${e.message}`, 'error');
     } finally {
       addingRoverAccount = false;
     }
@@ -70,33 +68,31 @@
 
   async function removeRoverAccount(user) {
     removingRoverUser = user;
-    roverAuthMsg = '';
     try {
       const res = await apiPost('settings', { 'rover_auth.remove': user });
       if (res.error) {
-        roverAuthMsg = res.error;
+        pushToast(res.error, 'error');
       } else {
         await fetchSettings();
       }
     } catch (e) {
-      roverAuthMsg = `Failed: ${e.message}`;
+      pushToast(`Failed: ${e.message}`, 'error');
     } finally {
       removingRoverUser = null;
     }
   }
 
   async function toggleRoverAccount(account) {
-    roverAuthMsg = '';
     const next = !account.enabled;
     try {
       const res = await apiPost('settings', { 'rover_auth.set_enabled.user': account.user, 'rover_auth.set_enabled.value': next ? 'Y' : 'N' });
       if (res.error) {
-        roverAuthMsg = res.error;
+        pushToast(res.error, 'error');
       } else {
         await fetchSettings();
       }
     } catch (e) {
-      roverAuthMsg = `Failed: ${e.message}`;
+      pushToast(`Failed: ${e.message}`, 'error');
     }
   }
 
@@ -104,17 +100,16 @@
     const value = roverPasswordInputs[user];
     if (!value) return;
     settingRoverPasswordUser = user;
-    roverAuthMsg = '';
     try {
       const res = await apiPost('settings', { 'rover_auth.set_password.user': user, 'rover_auth.set_password.value': value });
       if (res.error) {
-        roverAuthMsg = res.error;
+        pushToast(res.error, 'error');
       } else {
         roverPasswordInputs = { ...roverPasswordInputs, [user]: '' };
-        roverAuthMsg = `Password updated for ${user}.`;
+        pushToast(`Password updated for ${user}.`);
       }
     } catch (e) {
-      roverAuthMsg = `Failed: ${e.message}`;
+      pushToast(`Failed: ${e.message}`, 'error');
     } finally {
       settingRoverPasswordUser = null;
     }
@@ -125,15 +120,13 @@
   let newSmtpAuthPassword = $state('');
   let savingSmtpAuth = $state(false);
   let removingSmtpAuthHost = $state(null);
-  let smtpAuthMsg = $state('');
 
   async function setSmtpAuthCredential() {
     if (!newSmtpAuthHost || !newSmtpAuthUser || !newSmtpAuthPassword) {
-      smtpAuthMsg = 'Host, username and password are all required.';
+      pushToast('Host, username and password are all required.', 'error');
       return;
     }
     savingSmtpAuth = true;
-    smtpAuthMsg = '';
     try {
       const res = await apiPost('settings', {
         'alarms.smtp_auth.set.host': newSmtpAuthHost,
@@ -141,7 +134,7 @@
         'alarms.smtp_auth.set.password': newSmtpAuthPassword,
       });
       if (res.error) {
-        smtpAuthMsg = res.error;
+        pushToast(res.error, 'error');
       } else {
         newSmtpAuthHost = '';
         newSmtpAuthUser = '';
@@ -149,7 +142,7 @@
         await fetchSettings();
       }
     } catch (e) {
-      smtpAuthMsg = `Failed: ${e.message}`;
+      pushToast(`Failed: ${e.message}`, 'error');
     } finally {
       savingSmtpAuth = false;
     }
@@ -157,16 +150,15 @@
 
   async function removeSmtpAuthCredential(host) {
     removingSmtpAuthHost = host;
-    smtpAuthMsg = '';
     try {
       const res = await apiPost('settings', { 'alarms.smtp_auth.remove': host });
       if (res.error) {
-        smtpAuthMsg = res.error;
+        pushToast(res.error, 'error');
       } else {
         await fetchSettings();
       }
     } catch (e) {
-      smtpAuthMsg = `Failed: ${e.message}`;
+      pushToast(`Failed: ${e.message}`, 'error');
     } finally {
       removingSmtpAuthHost = null;
     }
@@ -197,7 +189,6 @@
           <button type="button" onclick={enableRoverAuth} disabled={savingRoverAuthFilename}>
             {savingRoverAuthFilename ? 'Enabling…' : 'Enable'}
           </button>
-          {#if roverAuthMsg}<span class="msg">{roverAuthMsg}</span>{/if}
         </div>
       {:else}
         <p class="field-hint">Auth file: <code>{form.rover_auth.filename}</code></p>
@@ -230,7 +221,6 @@
           <label>New password <input type="text" bind:value={newRoverPassword} /></label>
           <button type="button" onclick={addRoverAccount} disabled={addingRoverAccount}>{addingRoverAccount ? 'Adding…' : '+ Add account'}</button>
         </div>
-        {#if roverAuthMsg}<div class="msg">{roverAuthMsg}</div>{/if}
       {/if}
     </div>
 
@@ -266,7 +256,6 @@
           <button type="button" onclick={setSmtpAuthCredential} disabled={savingSmtpAuth}>{savingSmtpAuth ? 'Saving…' : 'Set credential'}</button>
         </div>
         <span class="field-hint">Setting a host that already has a credential replaces it.</span>
-        {#if smtpAuthMsg}<div class="msg">{smtpAuthMsg}</div>{/if}
       {/if}
     </div>
   {/if}
@@ -432,11 +421,6 @@
     align-items: center;
     gap: 1rem;
     margin-top: 1rem;
-  }
-
-  .msg {
-    font-size: 0.85rem;
-    color: var(--text-muted);
   }
 
   .error {

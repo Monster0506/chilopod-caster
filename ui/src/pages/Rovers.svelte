@@ -1,13 +1,13 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
   import { ggaQualityColor, ggaQualityLabel } from '../lib/gga.js';
+  import { pushToast } from '../lib/toast.js';
   import { ChevronDown, ChevronRight } from '@lucide/svelte';
 
   let data = $state(null);
   let error = $state('');
   let autoRefresh = $state(true);
   let dropping = $state(new Set());
-  let dropMsg = $state('');
   let expandedGga = $state(null);
   let nearCache = $state({});
 
@@ -55,13 +55,12 @@
 
   async function drop(id) {
     dropping = new Set([...dropping, id]);
-    dropMsg = '';
     try {
       await apiPost('drop', { id });
-      dropMsg = `Connection ${id} dropped.`;
+      pushToast(`Connection ${id} dropped.`);
       await fetchAll();
     } catch (e) {
-      dropMsg = `Drop failed: ${e.message}`;
+      pushToast(`Drop failed: ${e.message}`, 'error');
     } finally {
       dropping = new Set([...dropping].filter(x => x !== id));
     }
@@ -104,10 +103,6 @@
     <button onclick={fetchAll}>Refresh</button>
   </div>
 </div>
-
-{#if dropMsg}
-  <p class="drop-msg">{dropMsg}</p>
-{/if}
 
 {#if error}
   <p class="error">{error}</p>
@@ -271,12 +266,6 @@
   button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  .drop-msg {
-    margin: 0 0 1rem;
-    font-size: 0.85rem;
-    color: var(--text-dim);
   }
 
   .table-wrap {

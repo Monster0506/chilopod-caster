@@ -2,6 +2,7 @@
   import { apiGet, apiPost } from '../lib/api.js';
   import JsonTree from '../lib/JsonTree.svelte';
   import RevealSecret from '../lib/RevealSecret.svelte';
+  import { pushToast } from '../lib/toast.js';
   import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from '@lucide/svelte';
 
   let table = $state(null);
@@ -14,11 +15,8 @@
   let autoRefresh = $state(true);
   let showForm = $state(false);
   let submitting = $state(false);
-  let formMsg = $state('');
   let removing = $state(new Set());
-  let removeMsg = $state('');
   let detecting = $state(new Set());
-  let detectMsg = $state('');
 
   let editingMountpoint = $state(null);
   let editForm = $state({ group: '', identifier: '', auth_user: '', auth_password: '' });
@@ -144,24 +142,23 @@
   }
 
   async function submitForm() {
-    formMsg = '';
     if (!form.mountpoint || !form.source_password) {
-      formMsg = 'Mountpoint and password are required.';
+      pushToast('Mountpoint and password are required.', 'error');
       return;
     }
     submitting = true;
     try {
       const res = await apiPost('sources', { ...form });
       if (res.result === 0) {
-        formMsg = `Added ${form.mountpoint}.`;
+        pushToast(`Added ${form.mountpoint}.`);
         form = { ...blankForm };
         showForm = false;
         await fetchAll();
       } else {
-        formMsg = res.error ?? 'Failed to add mountpoint.';
+        pushToast(res.error ?? 'Failed to add mountpoint.', 'error');
       }
     } catch (e) {
-      formMsg = `Failed: ${e.message}`;
+      pushToast(`Failed: ${e.message}`, 'error');
     } finally {
       submitting = false;
     }
@@ -170,15 +167,16 @@
   async function removeSource(mountpoint) {
     if (!confirm(`Remove ${mountpoint}? This deletes its config and drops any active connection.`)) return;
     removing = new Set([...removing, mountpoint]);
-    removeMsg = '';
     try {
       const res = await apiPost('sources/remove', { mountpoint });
-      removeMsg = res.result === 0
-        ? `Removed ${mountpoint}${res.dropped_connections ? ` (dropped ${res.dropped_connections} active connection)` : ''}.`
-        : (res.error ?? 'Failed to remove mountpoint.');
+      if (res.result === 0) {
+        pushToast(`Removed ${mountpoint}${res.dropped_connections ? ` (dropped ${res.dropped_connections} active connection)` : ''}.`);
+      } else {
+        pushToast(res.error ?? 'Failed to remove mountpoint.', 'error');
+      }
       await fetchAll();
     } catch (e) {
-      removeMsg = `Failed: ${e.message}`;
+      pushToast(`Failed: ${e.message}`, 'error');
     } finally {
       removing = new Set([...removing].filter((x) => x !== mountpoint));
     }
@@ -186,17 +184,18 @@
 
   async function detectTypes(mountpoint) {
     detecting = new Set([...detecting, mountpoint]);
-    detectMsg = '';
     try {
       const res = await apiPost('sources/detect', { mountpoint });
       const navNote = res.nav_system ? `, nav-system ${res.nav_system}` : '';
       const posNote = res.lat != null ? `, position ${res.lat.toFixed(6)}, ${res.lon.toFixed(6)}` : '';
-      detectMsg = res.result === 0
-        ? `${mountpoint}: detected ${res.types}${navNote}${posNote}, updated.`
-        : `${mountpoint}: ${res.error ?? 'detection failed.'}`;
+      if (res.result === 0) {
+        pushToast(`${mountpoint}: detected ${res.types}${navNote}${posNote}, updated.`);
+      } else {
+        pushToast(`${mountpoint}: ${res.error ?? 'detection failed.'}`, 'error');
+      }
       if (res.result === 0) await fetchAll();
     } catch (e) {
-      detectMsg = `${mountpoint}: failed (${e.message}).`;
+      pushToast(`${mountpoint}: failed (${e.message}).`, 'error');
     } finally {
       detecting = new Set([...detecting].filter((x) => x !== mountpoint));
     }
@@ -292,16 +291,8 @@
     </div>
     <div class="form-actions">
       <button type="submit" disabled={submitting}>{submitting ? 'Adding…' : 'Add mountpoint'}</button>
-      {#if formMsg}<span class="form-msg">{formMsg}</span>{/if}
     </div>
   </form>
-{/if}
-
-{#if removeMsg}
-  <p class="remove-msg">{removeMsg}</p>
-{/if}
-{#if detectMsg}
-  <p class="remove-msg">{detectMsg}</p>
 {/if}
 
 {#if error}
@@ -653,17 +644,6 @@
     align-items: center;
     gap: 1rem;
     margin-top: 1rem;
-  }
-
-  .form-msg {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-  }
-
-  .remove-msg {
-    margin: 0 0 1rem;
-    font-size: 0.85rem;
-    color: var(--text-dim);
   }
 
   .actions {

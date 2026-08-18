@@ -1,6 +1,7 @@
 <script>
   import { router } from '../lib/router.js';
   import { getCredentials, clearCredentials } from '../lib/api.js';
+  import Toast from '../lib/Toast.svelte';
   import Dashboard from '../pages/Dashboard.svelte';
   import Connections from '../pages/Connections.svelte';
   import Map from '../pages/Map.svelte';
@@ -63,6 +64,8 @@
     {/if}
   </main>
 </div>
+
+<Toast />
 
 <style>
   .shell {

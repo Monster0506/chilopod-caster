@@ -1,6 +1,7 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
   import { ggaQualityColor, ggaQualityLabel } from '../lib/gga.js';
+  import { pushToast } from '../lib/toast.js';
 
   const HISTORY_MAX = 20;
   const POLL_MS = 5000;
@@ -17,7 +18,6 @@
   let settings = $state(null);
   let error = $state('');
   let reloading = $state(false);
-  let reloadMsg = $state('');
 
   let connHistory = $state([]);
   let churnHistory = $state([]);
@@ -197,12 +197,11 @@
 
   async function reload() {
     reloading = true;
-    reloadMsg = '';
     try {
       const r = await apiPost('reload');
-      reloadMsg = r.result === 0 ? 'Config reloaded.' : 'Reload returned ' + r.result;
+      pushToast(r.result === 0 ? 'Config reloaded.' : 'Reload returned ' + r.result, r.result === 0 ? 'info' : 'error');
     } catch (e) {
-      reloadMsg = 'Reload failed: ' + e.message;
+      pushToast('Reload failed: ' + e.message, 'error');
     } finally {
       reloading = false;
     }
@@ -232,7 +231,6 @@
       <button onclick={reload} disabled={reloading}>
         {reloading ? 'Reloading…' : 'Reload Config'}
       </button>
-      {#if reloadMsg}<span class="reload-msg">{reloadMsg}</span>{/if}
     </div>
   </div>
 
@@ -479,11 +477,6 @@
   button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  .reload-msg {
-    font-size: 0.85rem;
-    color: var(--text-dim);
   }
 
   .bare-strip {

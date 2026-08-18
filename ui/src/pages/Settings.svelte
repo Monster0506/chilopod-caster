@@ -1,6 +1,7 @@
 <script>
   import { apiGet, apiPost, getCredentials, setCredentials } from '../lib/api.js';
   import Switch from '../lib/Switch.svelte';
+  import { pushToast, updateToast, dismissToast } from '../lib/toast.js';
 
   const LOG_LEVELS = ['EMERG', 'ALERT', 'CRIT', 'ERR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG', 'EDEBUG'];
 
@@ -86,7 +87,6 @@
   let error = $state('');
   let loading = $state(true);
   let savingSection = $state(null);
-  let sectionMsg = $state({});
 
   let newPassword = $state('');
   let confirmPassword = $state('');
@@ -129,6 +129,17 @@
     return blocks;
   });
 
+  let unsavedToastId = null;
+  $effect(() => {
+    if (dirtyBlocks.length === 0) {
+      if (unsavedToastId != null) { dismissToast(unsavedToastId); unsavedToastId = null; }
+      return;
+    }
+    const text = `Unsaved changes: ${dirtyBlocks.join(', ')}`;
+    if (unsavedToastId == null) unsavedToastId = pushToast(text, 'warn', { sticky: true });
+    else updateToast(unsavedToastId, text);
+  });
+
   let mountpointNames = $state([]);
 
   async function fetchMountpointNames() {
@@ -145,27 +156,23 @@
 
   async function saveSection(section) {
     savingSection = section.key;
-    sectionMsg = { ...sectionMsg, [section.key]: '' };
     const payload = {};
     for (const f of section.fields) payload[f.name] = String(form[f.name] ?? '');
     try {
       const res = await apiPost('settings', payload);
       if (res.error) {
         // Validation failure -- nothing was written, no need to resync.
-        sectionMsg = { ...sectionMsg, [section.key]: res.error };
+        pushToast(res.error, 'error');
       } else {
         // The value is written to disk before reload runs, so it's already
         // live even if reload itself (res.result !== 0) had trouble with an
         // unrelated step (e.g. reopening log files). Always resync to show
         // the server's actual current value rather than assuming failure.
-        sectionMsg = {
-          ...sectionMsg,
-          [section.key]: res.result === 0 ? 'Saved.' : 'Saved, but reload reported an issue -- showing current server value.',
-        };
+        pushToast(res.result === 0 ? `${section.title} saved.` : 'Saved, but reload reported an issue -- showing current server value.');
         await refreshAfterSave(section.fields.map((f) => f.name));
       }
     } catch (e) {
-      sectionMsg = { ...sectionMsg, [section.key]: `Failed: ${e.message}` };
+      pushToast(`Failed: ${e.message}`, 'error');
     } finally {
       savingSection = null;
     }
@@ -209,7 +216,6 @@
 
   async function saveAlarms() {
     savingSection = 'alarms';
-    sectionMsg = { ...sectionMsg, alarms: '' };
     const a = form.alarms;
     const payload = {
       'alarms.subject': a.subject ?? '',
@@ -254,16 +260,13 @@
     try {
       const res = await apiPost('settings', payload);
       if (res.error) {
-        sectionMsg = { ...sectionMsg, alarms: res.error };
+        pushToast(res.error, 'error');
       } else {
-        sectionMsg = {
-          ...sectionMsg,
-          alarms: res.result === 0 ? 'Saved.' : 'Saved, but reload reported an issue -- showing current server value.',
-        };
+        pushToast(res.result === 0 ? 'Alarms saved.' : 'Saved, but reload reported an issue -- showing current server value.');
         await refreshAfterSave(['alarms']);
       }
     } catch (e) {
-      sectionMsg = { ...sectionMsg, alarms: `Failed: ${e.message}` };
+      pushToast(`Failed: ${e.message}`, 'error');
     } finally {
       savingSection = null;
     }
@@ -508,7 +511,6 @@
 
           <div class="card-actions">
             <button type="submit" disabled={savingSection === 'alarms'}>{savingSection === 'alarms' ? 'Saving…' : 'Save'}</button>
-            {#if sectionMsg.alarms}<span class="msg">{sectionMsg.alarms}</span>{/if}
           </div>
         </form>
       {/if}
@@ -551,19 +553,12 @@
             <button type="submit" disabled={savingSection === section.key}>
               {savingSection === section.key ? 'Saving…' : 'Save'}
             </button>
-            {#if sectionMsg[section.key]}<span class="msg">{sectionMsg[section.key]}</span>{/if}
           </div>
         </form>
       </div>
     {/each}
   {/if}
 </div>
-
-{#if dirtyBlocks.length > 0}
-  <div class="unsaved-toast">
-    Unsaved changes: {dirtyBlocks.join(', ')}
-  </div>
-{/if}
 
 <style>
   .page {
@@ -610,21 +605,6 @@
     border-radius: 8px;
     padding: 1.25rem;
     margin-bottom: 1.25rem;
-  }
-
-  .unsaved-toast {
-    position: fixed;
-    left: 50%;
-    bottom: 1.25rem;
-    transform: translateX(-50%);
-    background: #3a2a0f;
-    border: 1px solid var(--warn);
-    border-radius: 8px;
-    padding: 0.6rem 1.1rem;
-    color: #fbbf24;
-    font-size: 0.85rem;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-    z-index: 100;
   }
 
   .card h3 {
