@@ -1,8 +1,10 @@
 <script>
-  import { apiGet, apiPost } from '../lib/api.js';
+  import { apiGet, apiPost, isAdmin } from '../lib/api.js';
   import { ggaQualityColor, ggaQualityLabel } from '../lib/gga.js';
   import { pushToast } from '../lib/toast.js';
   import { ChevronDown, ChevronRight } from '@lucide/svelte';
+
+  const admin = isAdmin();
 
   let data = $state(null);
   let error = $state('');
@@ -149,13 +151,15 @@
                   {#if expandedGga === conn.id}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
                 </button>
               {/if}
-              <button
-                class="drop-btn"
-                onclick={() => drop(conn.id)}
-                disabled={dropping.has(conn.id)}
-              >
-                {dropping.has(conn.id) ? '…' : 'Drop'}
-              </button>
+              {#if admin}
+                <button
+                  class="drop-btn"
+                  onclick={() => drop(conn.id)}
+                  disabled={dropping.has(conn.id)}
+                >
+                  {dropping.has(conn.id) ? '…' : 'Drop'}
+                </button>
+              {/if}
             </td>
           </tr>
           {#if expandedGga === conn.id && conn.gga}
