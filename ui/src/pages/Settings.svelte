@@ -91,7 +91,10 @@
   let newPassword = $state('');
   let confirmPassword = $state('');
   let savingPassword = $state(false);
-  let passwordMsg = $state('');
+
+  function scrollToSection(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   async function fetchSettings() {
     try {
@@ -325,17 +328,16 @@
 
   async function changePassword(e) {
     e.preventDefault();
-    passwordMsg = '';
-    if (!newPassword) { passwordMsg = 'New password is required.'; return; }
-    if (newPassword !== confirmPassword) { passwordMsg = 'Passwords do not match.'; return; }
+    if (!newPassword) { pushToast('New password is required.', 'error'); return; }
+    if (newPassword !== confirmPassword) { pushToast('Passwords do not match.', 'error'); return; }
     savingPassword = true;
     try {
       const adminUser = form.admin_user;
       const res = await apiPost('auth', { mountpoint: adminUser, auth_user: adminUser, auth_password: newPassword });
       if (res.error) {
-        passwordMsg = res.error;
+        pushToast(res.error, 'error');
       } else {
-        passwordMsg = 'Password changed.';
+        pushToast('Password changed.');
         newPassword = '';
         confirmPassword = '';
         // Keep the current session's stored credentials in sync, since the
@@ -344,7 +346,7 @@
         if (user === adminUser) setCredentials(user, res.password);
       }
     } catch (e) {
-      passwordMsg = `Failed: ${e.message}`;
+      pushToast(`Failed: ${e.message}`, 'error');
     } finally {
       savingPassword = false;
     }
@@ -365,13 +367,15 @@
   {:else if loading}
     <p class="loading">Loading…</p>
   {:else}
-    <div class="card">
+  <div class="settings-layout">
+  <div class="settings-main">
+    <div class="card" id="alarms">
       <h3>Alarms</h3>
       {#if !form.alarms}
         <p class="field-hint">Alarms are not configured. Add an <code>alarms:</code> block to caster.yaml to enable them.</p>
       {:else}
         <form onsubmit={(e) => { e.preventDefault(); saveAlarms(); }}>
-          <h4>Thresholds</h4>
+          <h4 id="alarms-thresholds">Thresholds</h4>
           <div class="grid">
             {#if form.alarms.station_offline}
               <label>Station offline after (minutes) <input type="number" bind:value={form.alarms.station_offline.after_minutes} /></label>
@@ -391,7 +395,7 @@
             {/if}
           </div>
 
-          <h4>Alarm types</h4>
+          <h4 id="alarms-types">Alarm types</h4>
           <div class="alarm-type-list">
             {#each ALARM_TYPES as t (t.key)}
               <label class="switch-row">
@@ -401,7 +405,7 @@
             {/each}
           </div>
 
-          <h4>Per-base alarm filters</h4>
+          <h4 id="alarms-filters">Per-base alarm filters</h4>
           {#if form.alarms.mountpoints.length === 0}
             <p class="field-hint">No overrides - every mountpoint is checked for every alarm type.</p>
           {:else}
@@ -450,7 +454,7 @@
           {/if}
           {#if mountpointFilterMsg}<div class="msg">{mountpointFilterMsg}</div>{/if}
 
-          <h4>Recipients</h4>
+          <h4 id="alarms-recipients">Recipients</h4>
           {#if form.alarms.recipients.length === 0}
             <p class="field-hint">No recipients configured.</p>
           {:else}
@@ -492,7 +496,7 @@
           </div>
 
           {#if form.alarms.smtp}
-            <h4>SMTP</h4>
+            <h4 id="alarms-smtp">SMTP</h4>
             <div class="grid">
               <label>Host <input type="text" bind:value={form.alarms.smtp.host} /></label>
               <label>Port <input type="number" bind:value={form.alarms.smtp.port} /></label>
@@ -516,7 +520,7 @@
       {/if}
     </div>
 
-    <div class="card">
+    <div class="card" id="admin-password">
       <h3>Admin password</h3>
       <form onsubmit={changePassword}>
         <div class="grid">
@@ -525,13 +529,12 @@
         </div>
         <div class="card-actions">
           <button type="submit" disabled={savingPassword}>{savingPassword ? 'Saving…' : 'Change password'}</button>
-          {#if passwordMsg}<span class="msg">{passwordMsg}</span>{/if}
         </div>
       </form>
     </div>
 
     {#each SECTIONS as section (section.key)}
-      <div class="card">
+      <div class="card" id="section-{section.key}">
         <h3>{section.title}</h3>
         <form onsubmit={(e) => { e.preventDefault(); saveSection(section); }}>
           <div class="grid">
@@ -557,13 +560,79 @@
         </form>
       </div>
     {/each}
+  </div>
+
+  <nav class="settings-nav">
+    <button type="button" onclick={() => scrollToSection('alarms')}>Alarms</button>
+    {#if form.alarms}
+      <button type="button" class="sub" onclick={() => scrollToSection('alarms-thresholds')}>Thresholds</button>
+      <button type="button" class="sub" onclick={() => scrollToSection('alarms-types')}>Alarm types</button>
+      <button type="button" class="sub" onclick={() => scrollToSection('alarms-filters')}>Per-base filters</button>
+      <button type="button" class="sub" onclick={() => scrollToSection('alarms-recipients')}>Recipients</button>
+      {#if form.alarms.smtp}<button type="button" class="sub" onclick={() => scrollToSection('alarms-smtp')}>SMTP</button>{/if}
+    {/if}
+    <button type="button" onclick={() => scrollToSection('admin-password')}>Admin password</button>
+    {#each SECTIONS as section (section.key)}
+      <button type="button" onclick={() => scrollToSection(`section-${section.key}`)}>{section.title}</button>
+    {/each}
+  </nav>
+  </div>
   {/if}
 </div>
 
 <style>
   .page {
     padding: 2rem;
+    max-width: 980px;
+  }
+
+  .settings-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 2rem;
+  }
+
+  .settings-main {
+    flex: 1;
+    min-width: 0;
     max-width: 760px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .settings-nav {
+    position: sticky;
+    top: 1.5rem;
+    flex-shrink: 0;
+    width: 150px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+  }
+
+  .settings-nav button {
+    cursor: pointer;
+    text-align: left;
+    background: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    color: var(--text-muted) !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    font-size: 0.8rem !important;
+  }
+
+  .settings-nav button:hover {
+    color: var(--text) !important;
+  }
+
+  .settings-nav button.sub {
+    padding-left: 0.85rem !important;
+    font-size: 0.75rem !important;
+    color: var(--text-dim) !important;
   }
 
   .header {
@@ -604,7 +673,6 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 1.25rem;
-    margin-bottom: 1.25rem;
   }
 
   .card h3 {
