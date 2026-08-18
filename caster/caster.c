@@ -746,6 +746,13 @@ caster_reload_auth(struct caster_state *caster, struct config *new_config) {
 		} else
 			r = -1;
 	}
+	if (new_config->user_auth_filename) {
+		struct user_auth_entry *tmp = user_auth_parse(caster, new_config->user_auth_filename);
+		if (tmp != NULL) {
+			new_config->user_auth = tmp;
+		} else
+			r = -1;
+	}
 	return r;
 }
 
