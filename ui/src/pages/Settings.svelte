@@ -446,20 +446,20 @@
           </div>
 
           <h4>Alarm types</h4>
-          <div class="recipient-list">
+          <div class="alarm-type-list">
             {#each ALARM_TYPES as t (t.key)}
-              <div class="recipient-row">
-                <span>{t.label}</span>
-                {#if form.alarms[t.key]}
-                  <button type="button" class="remove-btn" onclick={() => disableAlarmType(t.key)} disabled={togglingAlarmType === t.key}>
-                    {togglingAlarmType === t.key ? 'Disabling…' : 'Disable'}
-                  </button>
-                {:else}
-                  <button type="button" onclick={() => enableAlarmType(t.key)} disabled={togglingAlarmType === t.key}>
-                    {togglingAlarmType === t.key ? 'Enabling…' : 'Enable'}
-                  </button>
-                {/if}
-              </div>
+              <label class="switch-row">
+                <span>{t.label}{#if togglingAlarmType === t.key}<span class="field-hint"> …</span>{/if}</span>
+                <span class="switch">
+                  <input
+                    type="checkbox"
+                    checked={!!form.alarms[t.key]}
+                    disabled={togglingAlarmType === t.key}
+                    onchange={() => (form.alarms[t.key] ? disableAlarmType(t.key) : enableAlarmType(t.key))}
+                  />
+                  <span class="switch-track"></span>
+                </span>
+              </label>
             {/each}
           </div>
           {#if alarmTypeMsg}<div class="msg">{alarmTypeMsg}</div>{/if}
@@ -760,6 +760,81 @@
   .checkbox-label input[type='checkbox'] {
     width: auto;
     accent-color: #2563eb;
+  }
+
+  .alarm-type-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .switch-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.4rem 0;
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .switch {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+    width: 2.4rem;
+    height: 1.35rem;
+  }
+
+  .switch input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .switch-track {
+    position: absolute;
+    inset: 0;
+    background: #2a2f42;
+    border: 1px solid #333a52;
+    border-radius: 999px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .switch-track::before {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 1.1rem;
+    height: 1.1rem;
+    background: #cbd5e1;
+    border-radius: 50%;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+
+  .switch input:checked + .switch-track {
+    background: #2563eb;
+    border-color: #2563eb;
+  }
+
+  .switch input:checked + .switch-track::before {
+    transform: translateX(1.05rem);
+    background: #fff;
+  }
+
+  .switch input:disabled + .switch-track {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .switch input:focus-visible + .switch-track {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
   }
 
   .grid {
