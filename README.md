@@ -47,27 +47,19 @@ Building Chilopod from source requires a C compiler, `make`, and Go 1.24 or newe
 | json-c | 0.16 |
 | openssl | 3.0.15 |
 
-A minimal Debian/Ubuntu install has neither a compiler nor these libraries by default. Install them with apt:
+A minimal Debian/Ubuntu install has neither a compiler nor these libraries by default. On Debian and Ubuntu, `sudo ./install.sh` installs all of them automatically (see [Installation](#installation)) -- it calls `./configure.sh` first, which installs `build-essential`, `libcyaml-dev`, `libevent-dev`, `libjson-c-dev`, and `libssl-dev` via apt, plus a Go 1.24+ toolchain.
 
-```sh
-sudo apt install build-essential libcyaml-dev libevent-dev libjson-c-dev libssl-dev
-```
+To install them by hand instead, or on another distribution, install them with apt: `sudo apt install build-essential libcyaml-dev libevent-dev libjson-c-dev libssl-dev`
 
 Debian and Ubuntu's `golang-go` package is often older than 1.24. Check with `go version`, and if it reports an older version, install Go from the official tarball instead (check [go.dev/dl](https://go.dev/dl/) for the current release):
 
-```sh
-curl -LO https://go.dev/dl/go1.24.0.linux-amd64.tar.gz
-sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf go1.24.0.linux-amd64.tar.gz
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.profile
-source ~/.profile
-```
+- `curl -LO https://go.dev/dl/go1.24.0.linux-amd64.tar.gz`
+- `sudo rm -rf /usr/local/go`
+- `sudo tar -C /usr/local -xzf go1.24.0.linux-amd64.tar.gz`
+- `echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.profile`
+- `source ~/.profile`
 
-You'll also want `curl` for the admin API examples throughout this README, and `python3` if you use `scripts/rtcm_bridge.py` (see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source))
-
-```sh
-sudo apt install curl python3
-```
+You'll also want `curl` for the admin API examples throughout this README, and `python3` if you use `scripts/rtcm_bridge.py` (see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source)). `configure.sh` does not install these two: `sudo apt install curl python3`
 
 Building
 ========
@@ -78,151 +70,77 @@ cd caster; make clean all
 
 This produces two binaries inside `caster/`: `caster` (the daemon itself) and `tests` (the unit test suite -- run `./tests` to verify the build before installing).
 
-Chilopod's own RTCM3 decoding covers station position (1005/1006) and which message types have been seen, nothing more. To also decode satellite counts, per-constellation counts, and antenna/receiver info, build the sidecar from [rtcm-go](https://github.com/Monster0506/rtcm-go), bundled in this repository as a submodule at `rtcm-go/`, with a companion binary at `cmd/sidecar`. If you cloned without `--recurse-submodules`, fetch it first:
+Chilopod's own RTCM3 decoding covers station position (1005/1006) and which message types have been seen, nothing more. To also decode satellite counts, per-constellation counts, and antenna/receiver info, build the optional sidecar from [rtcm-go](https://github.com/Monster0506/rtcm-go), bundled in this repository as a submodule at `rtcm-go/`, with a companion binary at `cmd/sidecar`. If you cloned without `--recurse-submodules`, fetch it first: `cd .. && git submodule update --init --recursive`
 
-```sh
-cd ..
-git submodule update --init --recursive
-```
+Then build it: `cd rtcm-go && go build -o sidecar ./cmd/sidecar && cd ..`
 
-Then build it:
-
-```sh
-cd rtcm-go
-go build -o sidecar ./cmd/sidecar
-cd ..
-```
-
-To send alarm notification emails, build `ruckus` from [Ruckus](https://github.com/Monster0506/Ruckus), bundled in this repository as a submodule at `ruckus/`. The same `git submodule update --init --recursive` above fetches it too. Then build it:
-
-```sh
-cd ruckus
-go build -o ruckus .
-cd ..
-```
+To send alarm notification emails, build the optional `ruckus` binary from [Ruckus](https://github.com/Monster0506/Ruckus), bundled in this repository as a submodule at `ruckus/`. The same `git submodule update --init --recursive` above fetches it too. Then build it: `cd ruckus && go build -o ruckus . && cd ..`
 
 Building the UI
 ===============
 
 The pre-built UI is in `ui/dist/` and is committed to the repository. No Node.js required to deploy.
 
-To rebuild after making changes to the UI source:
-NOT REQUIRED:
+To rebuild after making changes to the UI source (not required otherwise): `cd ui && npm install && npm run build`
 
-```sh
-cd ui
-npm install
-npm run build
-```
-
-Chilopod serves the output in `ui/dist/` at `/adm/ui/`. Copy this output to the `ui_dir` directory in the configuration:
-
-```sh
-cp -r ui/dist/* /usr/local/etc/chilopod/ui/
-```
+Chilopod serves the output in `ui/dist/` at `/adm/ui/`. Copy this output to the `ui_dir` directory in the configuration: `cp -r ui/dist/* /usr/local/etc/chilopod/ui/`
 
 Installation
 ============
 
 These steps configure Chilopod as a dedicated system service. Run the steps as the root user.
 
-`install.sh`, in the root of this repository, automates steps 1 through 4 below, plus copying the pre-built UI (see [Building the UI](#building-the-ui)):
-
 ```sh
 sudo ./install.sh
 ```
 
-To do the same steps by hand, or to see what the script does:
+This calls `./configure.sh` first (system user, submodules, OS packages, Go toolchain), then builds and installs the `caster` daemon and `mapi` tool, the sidecar and `ruckus` binaries, the sample configuration files, the pre-built UI (see [Building the UI](#building-the-ui)), and log rotation.
 
-1. Create a `caster` user:
-   ```sh
-   useradd --system --no-create-home --shell /usr/sbin/nologin caster
-   ```
+Or, without the scripts:
+
+1. Create a `caster` user: `useradd --system --no-create-home --shell /usr/sbin/nologin caster`
 
 2. Install the `caster` daemon and `mapi` tool (both go to `/usr/local/sbin/` by default, per the Makefile's `DEST_DIR`), the sidecar binary you built earlier, and the wrapper script that runs both together as one unit:
-   ```sh
-   cd caster && make install
-   cd ..
-   install -m 0755 rtcm-go/sidecar /usr/local/sbin/sidecar
-   install -m 0755 sample-config/chilopod-run.sh /usr/local/sbin/chilopod-run.sh
-   ```
+   - `cd caster && make install && cd ..`
+   - `install -m 0755 rtcm-go/sidecar /usr/local/sbin/sidecar`
+   - `install -m 0755 sample-config/chilopod-run.sh /usr/local/sbin/chilopod-run.sh`
+
    Note: By default, the Makefile's `DEST_DIR` variable installs `caster` and `mapi` to `/usr/local/sbin/`.
 
 3. Create the configuration and log directories:
-   ```sh
-   mkdir -p /usr/local/etc/chilopod
-   mkdir -p /var/log/chilopod
-   chown caster /var/log/chilopod
-   ```
+   - `mkdir -p /usr/local/etc/chilopod`
+   - `mkdir -p /var/log/chilopod`
+   - `chown caster /var/log/chilopod`
 
 4. Copy the sample configuration files:
-   ```sh
-   cp sample-config/caster.yaml    /usr/local/etc/chilopod/caster.yaml
-   cp sample-config/source.auth    /usr/local/etc/chilopod/source.auth
-   cp sample-config/host.auth      /usr/local/etc/chilopod/host.auth
-   cp sample-config/sourcetable.dat /usr/local/etc/chilopod/sourcetable.dat
-   cp sample-config/blocklist      /usr/local/etc/chilopod/blocklist
-   ```
+   - `cp sample-config/caster.yaml /usr/local/etc/chilopod/caster.yaml`
+   - `cp sample-config/source.auth /usr/local/etc/chilopod/source.auth`
+   - `cp sample-config/host.auth /usr/local/etc/chilopod/host.auth`
+   - `cp sample-config/sourcetable.dat /usr/local/etc/chilopod/sourcetable.dat`
+   - `cp sample-config/blocklist /usr/local/etc/chilopod/blocklist`
 
-5. Edit `/usr/local/etc/chilopod/caster.yaml` and `/usr/local/etc/chilopod/source.auth` for your setup, including `sidecar_stats_file`.
+5. Install log rotation, so `/var/log/chilopod/*.log` doesn't grow unbounded: `sed 's#@LOG_DIR@#/var/log/chilopod#g' sample-config/chilopod-logrotate > /etc/logrotate.d/chilopod`
 
-See [Configuration Reference](#configuration-reference).
+   This rotates daily (or immediately past 1G), keeps 14 compressed generations, and sends `caster` a `SIGHUP` after rotating -- which it already treats as "reopen log files and reload config" (see `signalhup_cb` in `caster.c`), so a rotation never interrupts a running caster.
 
-6. Run Chilopod. The caster and the sidecar can run as two separate processes, or together as one systemd unit -- see [Running](#running).
+Either way, once installed:
+
+1. Edit `/usr/local/etc/chilopod/caster.yaml` and `/usr/local/etc/chilopod/source.auth` for your setup, including `sidecar_stats_file`. See [Configuration Reference](#configuration-reference).
+
+2. Run Chilopod. The caster and the sidecar can run as two separate processes, or together as one systemd unit -- see [Running](#running).
 
 Running
 =======
 
-**Direct:** Run the caster and the sidecar as two separate processes:
+Run `chilopod-run.sh` (installed in [Installation](#installation)) in a detached tmux session, if you want the caster to keep running after you log out without setting up a systemd unit:
 
 ```sh
-/usr/local/sbin/caster -d
-/usr/local/sbin/sidecar -caster 127.0.0.1:2101 -out /usr/local/etc/chilopod/mountpoints.json -poll 30s
+tmux new-session -d -s chilopod /usr/local/sbin/chilopod-run.sh
 ```
 
-| Flag | Meaning |
-|---|---|
-| `-caster` | The caster's own `host:port`, as an ordinary NTRIP client would connect to it |
-| `-out` | Path to write the stats file to |
-| `-poll` | How often to re-check the caster's sourcetable for mountpoints added or removed (default `60s`) |
+Reattach with `tmux attach -t chilopod`; stop it with `tmux kill-session -t chilopod`.
 
-> **CAUTION: `-out` must point to the exact same file as `sidecar_stats_file` in `caster.yaml`.** Chilopod does not check this for you. If the paths do not match, the admin API omits the `"sidecar"` key for every mountpoint, and gives no error. Use an absolute path on both sides.
-
-**systemd:** Run both from one unit, using the `chilopod-run.sh` wrapper script installed in [Installation](#installation):
-
-```sh
-#!/bin/sh
-/usr/local/sbin/sidecar -caster 127.0.0.1:2101 -out /usr/local/etc/chilopod/mountpoints.json -poll 30s &
-SIDECAR_PID=$!
-trap 'kill "$SIDECAR_PID" 2>/dev/null' EXIT INT TERM
-/usr/local/sbin/caster
-```
-
-The wrapper starts the sidecar in the background, then runs the caster in the foreground. The wrapper sets a trap for the exit signal. The trap kills the sidecar when caster stops. The caster runs without the `-d` flag here. A `Type=simple` unit requires its `ExecStart` process to stay in the foreground. The process must not fork or detach.
-
-The `Type=simple` unit uses the default `KillMode=control-group` setting. This setting sends the stop signal to every process in the cgroup of the unit: the wrapper, caster, and sidecar. The command `systemctl status` shows the wrapper as `MainPID`, not caster. `Restart=on-failure` still works, because the wrapper's exit status matches caster's exit status.
-
-Create `/etc/systemd/system/caster.service`:
-
-```ini
-[Unit]
-Description=Chilopod NTRIP Caster (with rtcm-go sidecar)
-After=network.target
-
-[Service]
-ExecStart=/usr/local/sbin/chilopod-run.sh
-User=caster
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then:
-```sh
-systemctl daemon-reload
-systemctl enable --now caster
-```
+See [docs/deployment.md](docs/deployment.md) for other deployment options.
 
 How Chilopod Works
 ===================
@@ -255,581 +173,23 @@ When a client connects to this base and sends its location in $G*GGA NMEA lines,
 
 ## Satellite & Antenna Info (rtcm-go Sidecar)
 
-The sidecar connects to every mountpoint on the caster as a normal NTRIP client, decodes each stream, and writes satellite counts, per-constellation counts, and antenna/receiver info to the stats file at `sidecar_stats_file`. Chilopod reads this file on each `/adm/api/v1/rtcm` request and merges it into the response under a `sidecar` key, next to its own `types` and `pos` data.
-
-Verify it's working:
-
-```sh
-curl "http://localhost:2101/adm/api/v1/rtcm?user=admin&password=admin"
-```
-
-When a mountpoint has live data, its entry gets a `"sidecar"` object:
-
-```json
-{
-  "MOUNT1": {
-    "types": "1005,1008,1077,...",
-    "pos": { "lat": 41.5, "lon": -81.5 },
-    "sidecar": {
-      "connected": true,
-      "constellations": { "GPS": 8, "GLONASS": 7, "Galileo": 7 },
-      "satellite_count": 22,
-      "antenna_descriptor": "SEPCHOKE_B3E6   SPKE",
-      "antenna_serial": "5856",
-      "receiver_type": "SEPT POLARX5",
-      "last_updated": "2026-08-13T03:20:22Z"
-    }
-  }
-}
-```
-
-You can also open the admin UI (`/adm/ui/`) and expand the RTCM detail panel for a mountpoint on the Mountpoints page. Satellite counts, constellation counts, and antenna info appear there automatically once the sidecar has data for the mountpoint.
+See [docs/sidecar.md](docs/sidecar.md).
 
 ## Alarm Notifications (ruckus)
 
-Chilopod can watch its own local mountpoints for four conditions and email an operator when one crosses a threshold, using the [ruckus](https://github.com/Monster0506/Ruckus) helper binary (bundled as a submodule -- see [Building](#building)). A background check runs every 30 seconds. Configure the [`alarms`](#alarms) block to turn this on; each condition below is independently opt-in.
-
-- **`station_offline`** -- a local, non-virtual mountpoint has had no live source connection for at least `after_minutes`. Re-alerts every `min_interval_minutes` while it stays down; this is not a one-shot.
-- **`station_online`** -- the reverse transition: a mountpoint that was tracked offline gets a live connection again. Fires immediately on that transition, with no duration threshold.
-- **`low_sv_count`** -- the [sidecar](#satellite--antenna-info-rtcm-go-sidecar)'s reported satellite count for a mountpoint stays below `min_sats` for at least `after_minutes`. Resets silently, with no separate "recovered" email, once the count is back at or above `min_sats`.
-- **`position_drift`** -- the running average distance between a mountpoint's live-decoded RTCM position and its declared sourcetable position exceeds `lat_mm` or `lon_mm` (checked in that order), or its altitude drifts more than `alt_mm` from its own first observed value, for at least `after_minutes`. The NTRIP `STR` format has no declared height field, so altitude compares against a self-baseline instead of a declared value. Resets silently once back under threshold.
-
-Every alert type shares one rate limit: the first email for a given mountpoint and condition sends immediately, but a repeat for the same still-ongoing condition waits at least `min_interval_minutes` since the last send before sending again. Rovers never trigger anything -- all four conditions apply to base stations only.
-
-Chilopod spawns `ruckus` as a one-shot subprocess per alert and never blocks on it. Recent outcomes -- sent or failed, with `ruckus`'s own error text on failure -- are available at [`GET /adm/api/v1/alarms`](#get-admapiv1alarms), and on the admin UI's Dashboard.
+See [docs/alarms.md](docs/alarms.md).
 
 Adding a Raw RTCM3 TCP Source
 ==============================
 
-The source side of Chilopod uses the NTRIP `SOURCE`/`POST` push protocol. Some GNSS receivers instead offer a raw TCP socket. This socket sends RTCM3 bytes with no NTRIP handshake. Use the following steps to feed one of these sources into the caster as a mountpoint.
-
-Note: You can do steps 2 through 4 (register the mountpoint and reload) in one call to [`POST /adm/api/v1/sources`](#post-admapiv1sources), or from the Sources page in the admin UI (`/adm/ui/`). Continue reading to learn what that call does, or to do the steps by hand.
-
-1. Pick a mountpoint name, for example `MOUNT1`. Generate a password:
-   ```sh
-   openssl rand -hex 12
-   ```
-
-2. Register the mountpoint in the source authentication file. This is the file set by `source_auth_file` in `caster.yaml` (`sample-config/source.auth` by default). Use one entry per line, in this colon-separated format:
-   ```
-   MOUNTPOINT:username:password
-   ```
-   Add:
-   ```
-   MOUNT1:MOUNT1:<generated password>
-   ```
-   The username field must be present. For a raw TCP or NTRIP1 source push, the caster does not check the username. The caster validates only the mountpoint and the password. Note: You can also add a wildcard entry, `*::sharedpassword`, to accept a push on any mountpoint that is not otherwise listed. This lets you skip registering each mountpoint individually.
-
-3. Advertise the mountpoint in the sourcetable file with a `STR` line. This is the file set by `sourcetable_file` in `caster.yaml` (`sample-config/sourcetable.dat` by default). The `STR` line is the standard NTRIP1 source-table record. It has 19 semicolon-separated fields:
-
-   | # | Field | Meaning |
-   |---|---|---|
-   | 1 | `STR` | literal record type |
-   | 2 | mountpoint | must match what you registered in step 2 |
-   | 3 | identifier | free-text station name |
-   | 4 | format | for example `RTCM3` |
-   | 5 | format-details | comma-separated RTCM message types, for example `1004,1006,1008,1012,1013,1033` |
-   | 6 | carrier | `0` = no carrier phase, `1` = L1, `2` = L1+L2 |
-   | 7 | nav-system | for example `GPS+GLO`, `GPS+GLO+GAL+BDS` |
-   | 8 | network | free-text network name, or `NONE` |
-   | 9 | country | ISO country code, or `NONE` |
-   | 10 | latitude | decimal degrees, positive north |
-   | 11 | longitude | decimal degrees, positive east (negative for west) |
-   | 12 | **virtual flag** | Chilopod-specific. `0` = real source, `1` = "NEAR" virtual base. This field **must be `0`** here. If it is not `0`, the caster refuses the source push with a 404 error. |
-   | 13 | solution | `0` = single base, `1` = network RTK |
-   | 14 | generator | free-text, for example hardware or vendor name |
-   | 15 | compr-encryp | compression/encryption, usually `none` |
-   | 16 | authentication | `N`, `B` (basic), or `D` (digest) |
-   | 17 | fee | `N` or `Y` |
-   | 18 | bitrate | approximate stream bitrate in bits/sec, or `0` |
-   | 19 | misc | free-text, often left empty |
-
-   At this point, you do not yet know the exact RTCM message types or position. A placeholder value is fine. A local, non-virtual mountpoint appears in the public sourcetable only after a source connects and starts streaming:
-   ```
-   STR;MOUNT1;MOUNT1;RTCM3;1004,1006,1008,1012,1013,1033;2;GPS+GLO;NONE;NONE;0.000;0.000;0;0;bridge;none;N;N;0;
-   ```
-
-4. Reload the running caster. A restart is not necessary:
-   ```sh
-   curl -X POST "http://localhost:2101/adm/api/v1/reload" --data "user=admin&password=admin"
-   ```
-
-5. Use `scripts/rtcm_bridge.py` to bridge the raw TCP stream into the NTRIP push protocol. This script connects to the remote TCP socket. It performs the `SOURCE <password> /<mountpoint>` handshake with the caster. It then relays bytes between the two connections. If either connection drops, the script reconnects with a backoff delay:
-   ```sh
-   python3 scripts/rtcm_bridge.py \
-     --remote-host <device-ip> --remote-port <device-port> \
-     --caster-host 127.0.0.1 --caster-port 2101 \
-     --mountpoint MOUNT1 --password <generated password>
-   ```
-   Run the script under a process supervisor, for example systemd, another process manager, or `nohup` with `&`. The script runs continuously and retries after a failure.
-
-   Some devices do not stream to a bare TCP connection. These devices show a `login:` and `Password:` prompt first. They send data only after authentication. For these devices, add `--remote-login-user` and `--remote-login-pass`. The bridge performs the login handshake once for each connection, before it relays data. The bridge also forwards any stream bytes that arrive with the login confirmation, instead of dropping them:
-   ```sh
-   python3 scripts/rtcm_bridge.py \
-     --remote-host <device-ip> --remote-port <device-port> \
-     --caster-host 127.0.0.1 --caster-port 2101 \
-     --mountpoint MOUNT1 --password <generated password> \
-     --remote-login-user <device-username> --remote-login-pass <device-password>
-   ```
-   Whether a device needs this option, and what login messages it expects, depends on the device. Try a bare connection first to find out. See the note below about a refused connection, for the case where nothing listens on the port.
-
-6. Make sure that the source is live:
-   ```sh
-   curl "http://localhost:2101/adm/api/v1/net?user=admin&password=admin"       # look for type "source", mountpoint MOUNT1
-   curl "http://localhost:2101/adm/api/v1/rtcm?user=admin&password=admin"      # decoded RTCM message types + position
-   curl http://localhost:2101/                                                 # STR;MOUNT1;... now present
-   ```
-
-7. When you can see the real decoded message types and position from step 6, update the placeholder `STR` line in `sourcetable_file` to match. Then reload the caster again. You can also call [`POST /adm/api/v1/sources/detect`](#post-admapiv1sourcesdetect) instead, which does this for you:
-   ```sh
-   curl -X POST "http://localhost:2101/adm/api/v1/sources/detect" --data "user=admin&password=admin&mountpoint=MOUNT1"
-   ```
-   You cannot know the real message types before this point. The caster discovers them by decoding the stream once the source is running. You cannot read these values from the device in advance. This detection works only for genuine RTCM3 sources. Chilopod does not parse other formats, for example CMR. For those formats, there is nothing to detect.
-
-If the connection is refused, determine whether the source device's TCP output allows only one client at a time. This limit is common on some receivers. The port can already be in use. You can also reconfigure the device to allow multiple connections.
-
-If your source already speaks NTRIP natively, do not use the bridge. Point the source directly at the caster, with the mountpoint and credentials from steps 1 and 2.
+See [docs/raw-rtcm-sources.md](docs/raw-rtcm-sources.md).
 
 Configuration Reference
 =======================
 
-All configuration lives in `caster.yaml`. Sample files are in `sample-config/`.
-
-## Core
-
-### `listen`
-
-A list of IP and port pairs to accept connections on. This list supports IPv4 and IPv6.
-
-```yaml
-listen:
-  - port: 2101
-    ip: 0.0.0.0
-  - port: 2443
-    ip: ::0
-    tls: true
-    tls_full_certificate_chain: /path/to/fullchain.pem
-    tls_private_key: /path/to/privkey.pem
-```
-
-### `source_auth_file`
-
-The path to the source authentication file (`source.auth`). This file controls which username and password pairs the caster accepts for NTRIP source connections and admin access.
-
-Format: one entry per line, as `MOUNTPOINT:username:password`
-
-```
-# Allow a specific source to push to MOUNT1
-MOUNT1:sourceuser:sourcepassword
-# Admin access (must match admin_user below)
-admin:admin:adminpassword
-# Wildcard: any mountpoint accepts this password
-*::sharedpassword
-```
-
-### `sourcetable_file`
-
-The path to the local sourcetable, in NTRIP STR format. For the full field-by-field format, see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source).
-
-### `host_auth_file`
-
-The path to the host authentication file (`host.auth`). This file holds the credentials that the caster uses for outbound connections to other casters, in proxy mode.
-
-Format: `HOST:username:password`
-
-### `rover_auth_file`
-
-Optional. The path to the rover authentication file. When set, any `GET` request for an actual RTCM stream (a real mountpoint or the virtual NEAR base) must present a username and password (HTTP Basic-Auth) matching an enabled entry in this file, or the caster replies `401`. The sourcetable itself (`GET /`) always stays open, with or without this setting.
-
-Format: one entry per line, as `username:password:Y` or `username:password:N` -- the third field enables or disables that account without deleting it.
-
-```
-# abc can log in
-abc:abc:Y
-# temporarily revoked, entry kept for later re-enabling
-oldrover:somepassword:N
-```
-
-Leaving this setting unset keeps RTCM streams open to any client, with no credentials required -- Chilopod's behavior before this setting existed.
-
-You can manage accounts from the Auth page in the admin UI (`/adm/ui/`), or edit this file by hand.
-
-### `admin_user`
-
-The key that the caster looks up in `source_auth_file` to authenticate `/adm` API requests. The default value is `admin`.
-
-```yaml
-admin_user: admin
-```
-
-## UI & Sidecar
-
-### `ui_dir`
-
-The directory that Chilopod serves static admin UI files from, at `GET /adm/ui/...`. This is the contents of `ui/dist` after [building the UI](#building-the-ui). If you omit this setting, Chilopod disables static file serving.
-
-```yaml
-ui_dir: /usr/local/etc/chilopod/ui
-```
-
-### `sidecar_stats_file`
-
-The path to the stats file that the [rtcm-go sidecar](#satellite--antenna-info-rtcm-go-sidecar) writes. When you set this path, Chilopod merges the satellite counts, constellation counts, and antenna info from the sidecar into `/adm/api/v1/rtcm`, and shows them in the admin UI. Chilopod resolves this path relative to the directory of `caster.yaml`, unless you give an absolute path. This path must match the sidecar's `-out` flag exactly.
-
-```yaml
-sidecar_stats_file: mountpoints.json
-```
-
-## Proxy & Clustering
-
-### `proxy`
-
-An optional upstream caster to proxy sources from. The caster fetches the remote sourcetable every `table_refresh_delay` seconds and merges it with the local sourcetable. The caster fetches sources on demand, when a client connects.
-
-```yaml
-proxy:
-  - host: maincaster.example.com
-    port: 2101
-    table_refresh_delay: 600
-```
-
-### `syncer_auth`
-
-A shared bearer token for cluster node synchronization, used by [`POST /adm/api/v1/sync`](#post-admapiv1sync). You need this token only when you run multiple caster nodes. All nodes must share the same value.
-
-```yaml
-syncer_auth: mysecrettoken
-```
-
-## Logging
-
-### `log` / `access_log`
-
-Paths for the main log and HTTP access log.
-
-### `log_level`
-
-Verbosity of the main log. One of: `EMERG`, `ALERT`, `CRIT`, `ERR`, `WARNING`, `NOTICE`, `INFO`, `DEBUG`, `EDEBUG`.
-
-> **WARNING:** Do not use `DEBUG` or `EDEBUG` in production. These levels write passwords to the log file.
-
-### `syslog`
-
-Optional syslog output.
-
-```yaml
-syslog:
-  - facility: local0
-    log_level: INFO
-```
-
-### `graylog`
-
-Optional Graylog/GELF log export.
-
-```yaml
-graylog:
-  - host: graylogserver.example.com
-    port: 7777
-    uri: '/gelf'
-    tls: true
-    log_level: INFO
-    retry_delay: 30        # seconds between reconnect attempts
-    queue_max_size: 1000000
-    drainfile: '/tmp/%Y%m%d-%H%M%S.log'
-    bulk_max_size: 62000   # 0 to disable bulk mode
-    authorization: 'token' # value for Authorization header
-```
-
-## Performance & Limits
-
-### `hysteresis_m`
-
-The distance hysteresis, in meters, for the NEAR base algorithm. This value prevents rapid base switching when a client is near the boundary between two bases. The default value is `500.0`.
-
-### `backlog_socket`
-
-The size of the kernel send buffer (`SO_SNDBUF`) for client sockets, in bytes. The default value is `114688` (112 KB).
-
-### `backlog_evbuffer`
-
-The maximum in-process send backlog for each client connection, in bytes. The caster drops clients that exceed this value. The default value is `16384`.
-
-## Filtering & Access Control
-
-### `rtcm_filter`
-
-An optional RTCM packet filter and converter. This version supports only one filter with one conversion rule.
-
-```yaml
-rtcm_filter:
-  - apply: NEAR4          # mountpoint to apply to
-    pass: 1005,1006,1033  # RTCM message types to pass through unchanged
-    convert:
-      - types: 1077,1087  # types to convert
-        conversion: msm7_4  # msm7_4 = MSM7MSM4, msm7_3 = MSM7MSM3
-```
-
-### `blocklist_file`
-
-The path to the IP blocklist file. This setting is optional.
-
-## Alarms
-
-### `alarms`
-
-Configures the [alarm notification system](#alarm-notifications-ruckus). Omit this block entirely to disable alarms. Each alert type below `alarms` is independently opt-in too -- an absent `station_offline`/`station_online`/`low_sv_count`/`position_drift` block means that alert never fires.
-
-```yaml
-alarms:
-  smtp:
-    host: smtp.example.com
-    port: 587                 # optional, default 587
-    tls: starttls              # required: none | starttls | smtps
-    auth_file: smtp.auth       # optional -- omit for an unauthenticated relay
-  recipients:
-    - name: Ops                # optional display name
-      email: ops@example.com
-      alarm_types: [station_offline, low_sv_count]  # optional -- omit for every alarm type
-  mountpoints:
-    - mountpoint: BASE1
-      alarm_types: [station_offline]  # BASE1 is only ever evaluated for this type
-  subject: Chilopod Alarm      # optional, default "Chilopod Alarm"
-  min_interval_minutes: 15     # optional, default 15
-  ruckus_path: /usr/local/sbin/ruckus   # optional, default shown
-  email_template: alarm-email.html      # optional, default shown
-
-  station_offline:
-    after_minutes: 5
-  station_online:
-    after_minutes: 0           # optional, default 0 -- {} is shorthand for this
-  low_sv_count:
-    min_sats: 9
-    after_minutes: 2
-  position_drift:
-    lat_mm: 50
-    lon_mm: 50
-    alt_mm: 100
-    after_minutes: 5
-```
-
-`smtp.auth_file` follows the same `host:username:password` format as [`host_auth_file`](#host_auth_file), keeping credentials out of `caster.yaml`. Omit it entirely to send through an unauthenticated relay, for example a local Postfix or Exim in relay-only mode -- Chilopod does not require or assume any specific email provider. You can manage credentials from the Auth page in the admin UI (`/adm/ui/`), or edit this file by hand.
-
-`ruckus_path` must point at a built [`ruckus`](#alarm-notifications-ruckus) binary. If it does not exist or fails to run, Chilopod logs the failure and records it at `GET /adm/api/v1/alarms`; it does not retry beyond what `ruckus` itself does internally.
-
-`email_template` is the path to the HTML template used to build the notification email body (see [Alarm Notifications](#alarm-notifications-ruckus) for the `{{PLACEHOLDER}}` format). Falls back to the plain-text summary if the file can't be read.
-
-`recipients[].alarm_types` restricts one recipient to a subset of alarm types (`station_offline`, `station_online`, `low_sv_count`, `position_drift`). Omit it and that recipient gets every type. If an alarm type ends up with zero subscribed recipients, Chilopod records the outcome at `GET /adm/api/v1/alarms` (`sent: false`) without spawning `ruckus` at all.
-
-`mountpoints[].alarm_types` restricts which alarm types even get *evaluated* for one mountpoint, using the same type names as `recipients[].alarm_types`. A mountpoint absent from this list, or listed with `alarm_types` omitted, is checked against every type (the default). Unlike the recipient-level filter, this gates detection itself -- a suppressed type never starts accumulating threshold state for that mountpoint and never appears in its `GET /adm/api/v1/alarms` history at all, not even as an unsent entry.
+See [docs/configuration.md](docs/configuration.md).
 
 Admin API
 =========
 
-All admin routes are under `/adm/`. The caster serves them on the port or ports that you configure in [`listen`](#listen). The sample configuration uses port `2101` by default.
-
-## Quick Reference
-
-| Method | Route | Description |
-|---|---|---|
-| GET | `/adm/api/v1/net` | Current NTRIP connections |
-| GET | `/adm/api/v1/rtcm` | RTCM stream statistics |
-| GET | `/adm/api/v1/mem` | Memory usage statistics |
-| GET | `/adm/api/v1/nodes` | Cluster node status |
-| GET | `/adm/api/v1/livesources` | Active live sources |
-| GET | `/adm/api/v1/sourcetables` | Merged sourcetable |
-| GET | `/adm/api/v1/alarms` | Recent alarm outcomes, most-recent-first |
-| POST | `/adm/api/v1/reload` | Reload configuration from disk |
-| POST | `/adm/api/v1/drop` | Drop a connection by ID |
-| POST | `/adm/api/v1/sources` | Add a mountpoint (writes source_auth_file + sourcetable_file, reloads) |
-| POST | `/adm/api/v1/sources/remove` | Remove a mountpoint and drop its active connection, if any |
-| POST | `/adm/api/v1/sources/detect` | Detect a connected RTCM3 source's real message types (and position, if sent) and update its `STR` line |
-| POST | `/adm/api/v1/sync` | Internal cluster sync (token auth, not user/password) |
-
-## Authentication
-
-**v1 API routes** require credentials. Pass them as query string parameters, or in a URL-encoded POST body:
-
-```
-GET /adm/api/v1/net?user=admin&password=admin
-```
-
-**Legacy routes** accept HTTP Basic Auth:
-
-```sh
-curl -u admin:admin http://localhost:2101/adm/net
-```
-
-The caster looks up the username as a key in `source_auth_file`. This key is the value of `admin_user` in `caster.yaml` (default: `admin`).
-
-## v1 API Routes
-
-### `GET /adm/api/v1/net`
-
-Returns a JSON object with all current NTRIP connections: clients, sources, and admin sessions.
-
-```sh
-curl "http://localhost:2101/adm/api/v1/net?user=admin&password=admin"
-```
-
-### `GET /adm/api/v1/rtcm`
-
-Returns RTCM stream statistics: the message types seen for each mountpoint (`types`). It also returns the station position, if Chilopod has decoded a 1005 or 1006 message (`pos`). If you set [`sidecar_stats_file`](#sidecar_stats_file) and the [rtcm-go sidecar](#satellite--antenna-info-rtcm-go-sidecar) has data for a mountpoint, the response merges in a `sidecar` object too. This object has satellite counts, constellation counts, and antenna and receiver info. If the sidecar has data for a mountpoint but Chilopod has not decoded anything for it, the mountpoint still gets an entry. Only the `sidecar` field is filled in.
-
-```sh
-curl "http://localhost:2101/adm/api/v1/rtcm?user=admin&password=admin"
-```
-
-### `GET /adm/api/v1/mem`
-
-Returns memory usage statistics.
-
-```sh
-curl "http://localhost:2101/adm/api/v1/mem?user=admin&password=admin"
-```
-
-### `GET /adm/api/v1/nodes`
-
-Returns cluster node status (relevant in multi-node deployments).
-
-```sh
-curl "http://localhost:2101/adm/api/v1/nodes?user=admin&password=admin"
-```
-
-### `GET /adm/api/v1/livesources`
-
-Returns the list of currently active live sources.
-
-```sh
-curl "http://localhost:2101/adm/api/v1/livesources?user=admin&password=admin"
-```
-
-### `GET /adm/api/v1/sourcetables`
-
-Returns the merged sourcetable (local + proxied sources).
-
-```sh
-curl "http://localhost:2101/adm/api/v1/sourcetables?user=admin&password=admin"
-```
-
-### `GET /adm/api/v1/alarms`
-
-Returns recent [alarm](#alarm-notifications-ruckus) outcomes, most-recent-first, up to the last 200. Each entry has `mountpoint`, `type` (one of `station_offline`, `station_online`, `low_sv_count`, `position_drift`), `summary`, `sent` (`true`/`false`), `exit_code`, `time`, and an `error` field when `sent` is `false`.
-
-```sh
-curl "http://localhost:2101/adm/api/v1/alarms?user=admin&password=admin"
-```
-
-### `POST /adm/api/v1/reload`
-
-Reloads configuration from disk without restarting. Send as `application/x-www-form-urlencoded`.
-
-```sh
-curl -X POST "http://localhost:2101/adm/api/v1/reload" \
-  --data "user=admin&password=admin"
-```
-
-### `POST /adm/api/v1/drop`
-
-Drops a specific connection by ID. Send as `application/x-www-form-urlencoded`.
-
-```sh
-curl -X POST "http://localhost:2101/adm/api/v1/drop" \
-  --data "user=admin&password=admin&id=<connection-id>"
-```
-
-### `POST /adm/api/v1/sources`
-
-Adds a mountpoint. This route appends an entry to `source_auth_file` and a `STR` line to `sourcetable_file`, then reloads the caster. It is the form-based equivalent of editing those files by hand and calling `reload`. For the meaning of each field, see [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source). The fields `mountpoint` and `source_password` are required. The fields `lat` and `lon` are required and must be numeric. Every other field is optional. Optional fields default the same way as the manual `STR` line, for example `format` defaults to `RTCM3` and `generator` defaults to `unknown`. If the mountpoint already exists, or a field contains `;`, `:`, or a newline, the route fails with `{"result": -1, "error": "..."}`.
-
-```sh
-curl -X POST "http://localhost:2101/adm/api/v1/sources" \
-  --data "user=admin&password=admin&mountpoint=MOUNT1&source_password=secret&lat=41.5&lon=-81.5"
-```
-
-> **CAUTION:** For any field value that contains `+`, for example `nav_system=GPS+GLO`, use `--data-urlencode` instead of `--data`. `curl --data` sends `+` as a literal character. Form-urlencoded bodies decode `+` as a space. As a result, the value arrives as `GPS GLO` instead of `GPS+GLO`.
-> ```sh
-> curl -X POST "http://localhost:2101/adm/api/v1/sources" \
->   --data-urlencode "user=admin" --data-urlencode "password=admin" \
->   --data-urlencode "mountpoint=MOUNT1" --data-urlencode "source_password=secret" \
->   --data-urlencode "nav_system=GPS+GLO" --data-urlencode "lat=41.5" --data-urlencode "lon=-81.5"
-> ```
-> This is not an issue with the Add Source form in the admin UI. The browser encodes `+` correctly.
-
-### `POST /adm/api/v1/sources/remove`
-
-Removes a mountpoint. This route deletes its entries from `source_auth_file` and `sourcetable_file`, drops any connection currently pushing to it, then reloads the caster. If no matching entry exists, the route fails with `{"result": -1, "error": "mountpoint not found"}`.
-
-```sh
-curl -X POST "http://localhost:2101/adm/api/v1/sources/remove" \
-  --data "user=admin&password=admin&mountpoint=MOUNT1"
-```
-
-### `POST /adm/api/v1/sources/detect`
-
-Looks up what the caster has decoded for a mountpoint. This is the same data that [`GET /adm/api/v1/rtcm`](#get-admapiv1rtcm) reports. The route rewrites the mountpoint's `STR` line to match, then reloads the caster. This is the automated version of the "update the placeholder `STR` line" step in [Adding a Raw RTCM3 TCP Source](#adding-a-raw-rtcm3-tcp-source). The route updates two things independently:
-
-- **Format details**: always, from the decoded RTCM3 message types.
-- **Position**: only if the source has sent a 1005 or 1006 message, with station coordinates. When this happens, the response includes `lat` and `lon`. Otherwise, the response omits them. You cannot know a source's real surveyed position in advance. Like the message types, the caster observes the position from the stream itself. For this reason, the `lat` and `lon` values on [`POST /adm/api/v1/sources`](#post-admapiv1sources) need to be approximate only.
-
-The route leaves all other fields on the line unchanged. If the mountpoint is not connected yet, or does not speak RTCM3 at all, for example a CMR source, the route fails with `{"result": -1, "error": "no RTCM3 data observed yet for this mountpoint -- ..."}`. Chilopod parses only RTCM3 framing, so there is nothing to detect from a non-RTCM3 stream.
-
-```sh
-curl -X POST "http://localhost:2101/adm/api/v1/sources/detect" \
-  --data "user=admin&password=admin&mountpoint=MOUNT1"
-# {"result": 0, "types": "1004,1006,1008,1012,1013,1033", "lat": 41.233276, "lon": -81.776917}
-```
-
-### `POST /adm/api/v1/sync`
-
-An internal cluster synchronization endpoint. This route uses `syncer_auth` token authentication, not the admin username and password. The `Content-Type` header must be `application/json`.
-
-## Legacy Routes
-
-These routes use HTTP Basic Auth and return the same data as their v1 equivalents.
-
-| Route | Description |
-|---|---|
-| `GET /adm/net` | List of NTRIP connections |
-| `GET /adm/mem` | Memory statistics |
-| `GET /adm/mem.json` | Memory statistics (JSON format) |
-
-## `mapi` Tool
-
-`mapi` is a Python 3 command-line tool that wraps the admin API. The install process places it at `/usr/local/sbin/mapi`.
-
-### Configuration
-
-`mapi` reads credentials from `~/.mapi.conf`. This is a JSON file with three keys:
-
-```json
-{
-  "user": "admin",
-  "password": "admin",
-  "baseurl": "http://localhost:2101/adm/api/v1/"
-}
-```
-
-Create it with:
-
-```sh
-cat > ~/.mapi.conf <<'EOF'
-{"user": "admin", "password": "admin", "baseurl": "http://localhost:2101/adm/api/v1/"}
-EOF
-```
-
-Change `baseurl` to point at the address and port of your caster. Chilopod supports TLS. If the caster has a TLS listener configured, use `https://`.
-
-### Usage
-
-```
-mapi net              # list all connections
-mapi rtcm             # RTCM stream statistics
-mapi mem              # memory statistics
-mapi nodes            # cluster node status
-mapi livesources      # active live sources
-mapi sourcetables     # merged sourcetable
-mapi reload           # reload config from disk
-mapi drop <id> [...]  # drop connection(s) by ID
-mapi killall          # drop all current connections
-```
+See [docs/admin-api.md](docs/admin-api.md).
