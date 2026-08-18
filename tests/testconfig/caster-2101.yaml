@@ -28,7 +28,7 @@ http_header_max_size: 4096
 http_content_length_max: 1000000
 access_log: ../test-access.log
 log: ../test-caster.log
-log_level: EDEBUG
+log_level: INFO
 admin_user: admin
 webroots:
 - path: webroot/
