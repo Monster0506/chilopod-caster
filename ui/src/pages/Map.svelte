@@ -406,7 +406,7 @@
 
   h2 {
     margin: 0;
-    color: #e2e8f0;
+    color: var(--text);
     font-size: 1.2rem;
   }
 
@@ -421,7 +421,7 @@
     align-items: center;
     gap: 0.4rem;
     font-size: 0.85rem;
-    color: #64748b;
+    color: var(--text-dim);
     cursor: pointer;
     user-select: none;
   }
@@ -429,9 +429,9 @@
   button {
     padding: 0.4rem 1rem;
     background: #1e3a5f;
-    border: 1px solid #2563eb;
+    border: 1px solid var(--accent);
     border-radius: 5px;
-    color: #93c5fd;
+    color: var(--accent-2);
     font-size: 0.85rem;
     cursor: pointer;
     transition: background 120ms;
@@ -442,7 +442,7 @@
   }
 
   .map-card {
-    border: 1px solid #2a2d3a;
+    border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;
     margin-bottom: 1.5rem;
@@ -457,7 +457,7 @@
   .table-title {
     margin: 0 0 0.75rem;
     font-size: 0.95rem;
-    color: #e2e8f0;
+    color: var(--text);
   }
 
   .table-title:not(:first-of-type) {
@@ -478,8 +478,8 @@
   }
 
   .badge-offline {
-    background: #2a2d3a;
-    color: #94a3b8;
+    background: var(--border);
+    color: var(--text-muted);
   }
 
   .dot {
@@ -509,16 +509,16 @@
   th {
     text-align: left;
     padding: 0.5rem 0.75rem;
-    color: #475569;
+    color: var(--text-dim);
     font-weight: 500;
-    border-bottom: 1px solid #2a2d3a;
+    border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
 
   td {
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid #1e2130;
-    color: #94a3b8;
+    color: var(--text-muted);
     vertical-align: middle;
   }
 
@@ -527,7 +527,7 @@
   }
 
   tr:hover td {
-    background: #1a1d27;
+    background: var(--surface);
   }
 
   tr.clickable {
@@ -541,7 +541,7 @@
 
   .empty {
     text-align: center;
-    color: #475569;
+    color: var(--text-dim);
     padding: 2rem;
   }
 
@@ -561,7 +561,7 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    border: 2px solid #0f1117;
+    border: 2px solid var(--bg);
     box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
     opacity: 0.82;
   }
@@ -572,17 +572,17 @@
   }
 
   :global(.leaflet-popup-content-wrapper) {
-    background: #1a1d27;
-    color: #e2e8f0;
+    background: var(--surface);
+    color: var(--text);
   }
 
   :global(.leaflet-popup-tip) {
-    background: #1a1d27;
+    background: var(--surface);
   }
 
   :global(.map-legend) {
-    background: #1a1d27ee;
-    border: 1px solid #2a2d3a;
+    background: var(--surface)ee;
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0.5rem 0.65rem;
     color: #cbd5e1;
@@ -603,7 +603,7 @@
 
   :global(.map-legend-col:first-child) {
     padding-right: 0.9rem;
-    border-right: 1px solid #2a2d3a;
+    border-right: 1px solid var(--border);
   }
 
   :global(.map-legend-dot) {

@@ -451,7 +451,7 @@
 
   h2 {
     margin: 0;
-    color: #e2e8f0;
+    color: var(--text);
     font-size: 1.2rem;
   }
 
@@ -464,9 +464,9 @@
   button {
     padding: 0.4rem 1rem;
     background: #1e3a5f;
-    border: 1px solid #2563eb;
+    border: 1px solid var(--accent);
     border-radius: 5px;
-    color: #93c5fd;
+    color: var(--accent-2);
     font-size: 0.85rem;
     cursor: pointer;
     transition: background 120ms;
@@ -483,7 +483,7 @@
 
   .reload-msg {
     font-size: 0.85rem;
-    color: #64748b;
+    color: var(--text-dim);
   }
 
   .bare-strip {
@@ -501,13 +501,13 @@
     font-weight: 600;
     letter-spacing: 0.03em;
     text-transform: uppercase;
-    color: #475569;
+    color: var(--text-dim);
     margin-right: 0.3rem;
   }
 
   .strip-empty {
     font-size: 0.78rem;
-    color: #475569;
+    color: var(--text-dim);
   }
 
   .strip-label-right {
@@ -522,8 +522,8 @@
 
   .card {
     grid-column: span 12;
-    background: #1a1d27;
-    border: 1px solid #2a2d3a;
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 1.1rem 1.25rem;
     min-width: 0;
@@ -542,7 +542,7 @@
     font-weight: 600;
     letter-spacing: 0.03em;
     text-transform: uppercase;
-    color: #475569;
+    color: var(--text-dim);
     margin: 0 0 0.85rem;
   }
 
@@ -560,18 +560,18 @@
     font-variant-numeric: tabular-nums;
     font-size: 1.9rem;
     font-weight: 700;
-    color: #e2e8f0;
+    color: var(--text);
     line-height: 1;
   }
 
   .stat-sub-inline {
     font-size: 1rem;
-    color: #475569;
+    color: var(--text-dim);
   }
 
   .stat-sub {
     font-size: 0.75rem;
-    color: #64748b;
+    color: var(--text-dim);
     margin-top: 0.35rem;
   }
 
@@ -589,11 +589,11 @@
     font-family: monospace;
     font-size: 0.72rem;
     margin-top: 0.5rem;
-    color: #94a3b8;
+    color: var(--text-muted);
   }
   .trend.up { color: #86efac; }
   .trend.down { color: #fca5a5; }
-  .trend .dim { color: #475569; }
+  .trend .dim { color: var(--text-dim); }
 
   .dot {
     width: 8px;
@@ -601,12 +601,12 @@
     border-radius: 50%;
     flex-shrink: 0;
     display: inline-block;
-    background: #475569;
+    background: var(--text-dim);
   }
-  .dot.good { background: #22c55e; box-shadow: 0 0 0 2px #14301b; }
-  .dot.warn { background: #d97706; box-shadow: 0 0 0 2px #3a2a0f; }
-  .dot.off { background: #475569; }
-  .dot.bad { background: #ef4444; box-shadow: 0 0 0 2px #3a1414; }
+  .dot.good { background: var(--good); box-shadow: 0 0 0 2px #14301b; }
+  .dot.warn { background: var(--warn); box-shadow: 0 0 0 2px #3a2a0f; }
+  .dot.off { background: var(--text-dim); }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 0 2px #3a1414; }
 
   .chip-row {
     display: flex;
@@ -621,7 +621,7 @@
     border-radius: 999px;
     background: #14161f;
     border: 1px solid #1e2130;
-    color: #94a3b8;
+    color: var(--text-muted);
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
@@ -640,7 +640,7 @@
   .table-scroll table.mini thead th {
     position: sticky;
     top: 0;
-    background: #1a1d27;
+    background: var(--surface);
     z-index: 1;
   }
 
@@ -652,19 +652,19 @@
   table.mini th {
     text-align: left;
     font-weight: 500;
-    color: #475569;
+    color: var(--text-dim);
     padding: 0 0.5rem 0.4rem 0;
     border-bottom: 1px solid #1e2130;
   }
   table.mini td {
     padding: 0.4rem 0.5rem 0.4rem 0;
     border-bottom: 1px solid #1e2130;
-    color: #94a3b8;
+    color: var(--text-muted);
   }
   table.mini tr:last-child td { border-bottom: none; }
 
   .empty-cell {
-    color: #475569;
+    color: var(--text-dim);
     padding: 0.6rem 0;
   }
 
@@ -674,12 +674,12 @@
     gap: 0.6rem;
     padding: 0.35rem 0;
     font-size: 0.78rem;
-    color: #94a3b8;
+    color: var(--text-muted);
     border-bottom: 1px solid #1e2130;
   }
   .list-row:last-child { border-bottom: none; }
   .list-row .t {
-    color: #475569;
+    color: var(--text-dim);
     font-family: monospace;
     font-size: 0.68rem;
     width: 3.8rem;
@@ -696,8 +696,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .alarm-mp { color: #e2e8f0; flex-shrink: 0; }
-  .alarm-type { color: #94a3b8; }
+  .alarm-mp { color: var(--text); flex-shrink: 0; }
+  .alarm-type { color: var(--text-muted); }
   .alarm-fail { color: #fca5a5; font-size: 0.72rem; }
 
   .bare-chart {
@@ -708,7 +708,7 @@
     margin: 0.7rem 0 0;
     text-align: center;
     font-size: 0.75rem;
-    color: #64748b;
+    color: var(--text-dim);
   }
 
   .error {
@@ -717,7 +717,7 @@
   }
 
   .loading {
-    color: #475569;
+    color: var(--text-dim);
     font-size: 0.9rem;
   }
 </style>

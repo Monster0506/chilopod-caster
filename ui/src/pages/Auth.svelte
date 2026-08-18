@@ -305,16 +305,16 @@
 
   h2 {
     margin: 0;
-    color: #e2e8f0;
+    color: var(--text);
     font-size: 1.2rem;
   }
 
   button {
     padding: 0.4rem 1rem;
     background: #1e3a5f;
-    border: 1px solid #2563eb;
+    border: 1px solid var(--accent);
     border-radius: 5px;
-    color: #93c5fd;
+    color: var(--accent-2);
     font-size: 0.85rem;
     cursor: pointer;
     transition: background 120ms;
@@ -330,8 +330,8 @@
   }
 
   .card {
-    background: #1a1d27;
-    border: 1px solid #2a2d3a;
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 1.25rem;
     margin-bottom: 1.25rem;
@@ -340,12 +340,12 @@
   .card h3 {
     margin: 0 0 1rem;
     font-size: 0.95rem;
-    color: #e2e8f0;
+    color: var(--text);
   }
 
   .card code {
     background: #12141c;
-    border: 1px solid #2a2d3a;
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.1rem 0.35rem;
     font-size: 0.85em;
@@ -377,13 +377,13 @@
     min-width: 0;
     font-family: monospace;
     font-variant-numeric: tabular-nums;
-    color: #e2e8f0;
+    color: var(--text);
     align-self: center;
   }
 
   .mono {
     font-family: monospace;
-    color: #e2e8f0;
+    color: var(--text);
   }
 
   .reveal-btn {
@@ -397,7 +397,7 @@
   }
 
   .reveal-btn:hover {
-    color: #93c5fd;
+    color: var(--accent-2);
   }
 
   .remove-btn {
@@ -422,12 +422,12 @@
     align-items: center;
     gap: 0.35rem;
     font-size: 0.78rem;
-    color: #94a3b8;
+    color: var(--text-muted);
   }
 
   .checkbox-label input[type='checkbox'] {
     width: auto;
-    accent-color: #2563eb;
+    accent-color: var(--accent);
   }
 
   .grid {
@@ -441,27 +441,27 @@
     flex-direction: column;
     gap: 0.3rem;
     font-size: 0.78rem;
-    color: #64748b;
+    color: var(--text-dim);
   }
 
   input {
     padding: 0.4rem 0.6rem;
     background: #12141c;
-    border: 1px solid #2a2d3a;
+    border: 1px solid var(--border);
     border-radius: 5px;
-    color: #e2e8f0;
+    color: var(--text);
     font-size: 0.85rem;
     font-family: inherit;
   }
 
   input:focus {
     outline: none;
-    border-color: #2563eb;
+    border-color: var(--accent);
   }
 
   .field-hint {
     font-size: 0.72rem;
-    color: #475569;
+    color: var(--text-dim);
   }
 
   .card-actions {
@@ -473,7 +473,7 @@
 
   .msg {
     font-size: 0.85rem;
-    color: #94a3b8;
+    color: var(--text-muted);
   }
 
   .error {
@@ -482,7 +482,7 @@
   }
 
   .loading {
-    color: #475569;
+    color: var(--text-dim);
     font-size: 0.9rem;
   }
 </style>

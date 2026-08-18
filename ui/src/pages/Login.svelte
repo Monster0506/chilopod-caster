@@ -63,12 +63,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #0f1117;
+    background: var(--bg);
   }
 
   .login-box {
-    background: #1a1d27;
-    border: 1px solid #2a2d3a;
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 2.5rem 2rem;
     width: 100%;
@@ -81,13 +81,13 @@
   h1 {
     margin: 0;
     font-size: 1.6rem;
-    color: #e2e8f0;
+    color: var(--text);
     letter-spacing: 0.02em;
   }
 
   .subtitle {
     margin: -0.8rem 0 0;
-    color: #64748b;
+    color: var(--text-dim);
     font-size: 0.85rem;
   }
 
@@ -96,27 +96,27 @@
     flex-direction: column;
     gap: 0.4rem;
     font-size: 0.85rem;
-    color: #94a3b8;
+    color: var(--text-muted);
   }
 
   input {
     padding: 0.55rem 0.75rem;
-    background: #0f1117;
-    border: 1px solid #2a2d3a;
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: 5px;
-    color: #e2e8f0;
+    color: var(--text);
     font-size: 0.95rem;
     outline: none;
     transition: border-color 150ms;
   }
 
   input:focus {
-    border-color: #3b82f6;
+    border-color: var(--accent);
   }
 
   button {
     padding: 0.6rem;
-    background: #3b82f6;
+    background: var(--accent);
     color: #fff;
     border: none;
     border-radius: 5px;
@@ -126,7 +126,7 @@
   }
 
   button:hover:not(:disabled) {
-    background: #2563eb;
+    background: var(--accent);
   }
 
   button:disabled {

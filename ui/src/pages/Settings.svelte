@@ -582,16 +582,16 @@
 
   h2 {
     margin: 0;
-    color: #e2e8f0;
+    color: var(--text);
     font-size: 1.2rem;
   }
 
   button {
     padding: 0.4rem 1rem;
     background: #1e3a5f;
-    border: 1px solid #2563eb;
+    border: 1px solid var(--accent);
     border-radius: 5px;
-    color: #93c5fd;
+    color: var(--accent-2);
     font-size: 0.85rem;
     cursor: pointer;
     transition: background 120ms;
@@ -607,8 +607,8 @@
   }
 
   .card {
-    background: #1a1d27;
-    border: 1px solid #2a2d3a;
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 1.25rem;
     margin-bottom: 1.25rem;
@@ -620,7 +620,7 @@
     bottom: 1.25rem;
     transform: translateX(-50%);
     background: #3a2a0f;
-    border: 1px solid #d97706;
+    border: 1px solid var(--warn);
     border-radius: 8px;
     padding: 0.6rem 1.1rem;
     color: #fbbf24;
@@ -632,7 +632,7 @@
   .card h3 {
     margin: 0 0 1rem;
     font-size: 0.95rem;
-    color: #e2e8f0;
+    color: var(--text);
   }
 
   .card h4 {
@@ -641,12 +641,12 @@
     font-weight: 600;
     letter-spacing: 0.02em;
     text-transform: uppercase;
-    color: #64748b;
+    color: var(--text-dim);
   }
 
   .card code {
     background: #12141c;
-    border: 1px solid #2a2d3a;
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.1rem 0.35rem;
     font-size: 0.85em;
@@ -678,7 +678,7 @@
     min-width: 0;
     font-family: monospace;
     font-variant-numeric: tabular-nums;
-    color: #e2e8f0;
+    color: var(--text);
     align-self: center;
   }
 
@@ -713,12 +713,12 @@
     align-items: center;
     gap: 0.35rem;
     font-size: 0.78rem;
-    color: #94a3b8;
+    color: var(--text-muted);
   }
 
   .checkbox-label input[type='checkbox'] {
     width: auto;
-    accent-color: #2563eb;
+    accent-color: var(--accent);
   }
 
   .alarm-type-list {
@@ -734,7 +734,7 @@
     justify-content: space-between;
     gap: 0.75rem;
     padding: 0.4rem 0;
-    color: #e2e8f0;
+    color: var(--text);
     font-size: 0.9rem;
     cursor: pointer;
   }
@@ -777,8 +777,8 @@
   }
 
   .switch input:checked + .switch-track {
-    background: #2563eb;
-    border-color: #2563eb;
+    background: var(--accent);
+    border-color: var(--accent);
   }
 
   .switch input:checked + .switch-track::before {
@@ -792,7 +792,7 @@
   }
 
   .switch input:focus-visible + .switch-track {
-    outline: 2px solid #2563eb;
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
 
@@ -807,27 +807,27 @@
     flex-direction: column;
     gap: 0.3rem;
     font-size: 0.78rem;
-    color: #64748b;
+    color: var(--text-dim);
   }
 
   input, select {
     padding: 0.4rem 0.6rem;
     background: #12141c;
-    border: 1px solid #2a2d3a;
+    border: 1px solid var(--border);
     border-radius: 5px;
-    color: #e2e8f0;
+    color: var(--text);
     font-size: 0.85rem;
     font-family: inherit;
   }
 
   input:focus, select:focus {
     outline: none;
-    border-color: #2563eb;
+    border-color: var(--accent);
   }
 
   .field-hint {
     font-size: 0.72rem;
-    color: #475569;
+    color: var(--text-dim);
   }
 
   .card-actions {
@@ -839,7 +839,7 @@
 
   .msg {
     font-size: 0.85rem;
-    color: #94a3b8;
+    color: var(--text-muted);
   }
 
   .error {
@@ -848,7 +848,7 @@
   }
 
   .loading {
-    color: #475569;
+    color: var(--text-dim);
     font-size: 0.9rem;
   }
 </style>

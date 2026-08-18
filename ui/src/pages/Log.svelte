@@ -158,7 +158,7 @@
 
   h2 {
     margin: 0;
-    color: #e2e8f0;
+    color: var(--text);
     font-size: 1.2rem;
   }
 
@@ -174,7 +174,7 @@
     align-items: center;
     gap: 0.4rem;
     font-size: 0.85rem;
-    color: #64748b;
+    color: var(--text-dim);
     cursor: pointer;
     user-select: none;
   }
@@ -182,9 +182,9 @@
   button {
     padding: 0.4rem 0.85rem;
     background: #1e3a5f;
-    border: 1px solid #2563eb;
+    border: 1px solid var(--accent);
     border-radius: 5px;
-    color: #93c5fd;
+    color: var(--accent-2);
     font-size: 0.85rem;
     cursor: pointer;
     transition: background 120ms;
@@ -207,9 +207,9 @@
   .search-input {
     padding: 0.4rem 0.65rem;
     background: #12141c;
-    border: 1px solid #2a2d3a;
+    border: 1px solid var(--border);
     border-radius: 5px;
-    color: #e2e8f0;
+    color: var(--text);
     font-size: 0.85rem;
     font-family: inherit;
     width: 220px;
@@ -217,7 +217,7 @@
 
   .search-input:focus {
     outline: none;
-    border-color: #2563eb;
+    border-color: var(--accent);
   }
 
   .type-filter {
@@ -230,9 +230,9 @@
     gap: 0.35rem;
     padding: 0.35rem 0.6rem;
     background: #12141c;
-    border: 1px solid #2a2d3a;
+    border: 1px solid var(--border);
     border-radius: 5px;
-    color: #94a3b8;
+    color: var(--text-muted);
     font-size: 0.85rem;
     cursor: pointer;
   }
@@ -243,7 +243,7 @@
 
   .caret {
     font-size: 0.7rem;
-    color: #475569;
+    color: var(--text-dim);
   }
 
   .filter-panel {
@@ -256,7 +256,7 @@
     flex-direction: column;
     gap: 0.2rem;
     background: #12141c;
-    border: 1px solid #2a2d3a;
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0.4rem;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
@@ -269,14 +269,14 @@
     padding: 0.3rem 0.4rem;
     border-radius: 4px;
     font-size: 0.82rem;
-    color: #94a3b8;
+    color: var(--text-muted);
     cursor: pointer;
     user-select: none;
   }
 
   .filter-option:hover {
     background: #22263a;
-    color: #e2e8f0;
+    color: var(--text);
   }
 
   .lvl-dot {
@@ -290,7 +290,7 @@
     flex: 1;
     min-height: 0;
     background: #12141c;
-    border: 1px solid #2a2d3a;
+    border: 1px solid var(--border);
     border-radius: 8px;
     display: flex;
     flex-direction: column;
@@ -315,11 +315,11 @@
   }
 
   .log-line:hover {
-    background: #1a1d2740;
+    background: var(--surface)40;
   }
 
   .lg-time {
-    color: #475569;
+    color: var(--text-dim);
     flex-shrink: 0;
   }
 
@@ -336,12 +336,12 @@
   }
 
   .lg-meta {
-    color: #475569;
+    color: var(--text-dim);
     flex-shrink: 0;
   }
 
   .lg-msg {
-    color: #94a3b8;
+    color: var(--text-muted);
     flex: 1;
   }
 
@@ -349,7 +349,7 @@
   .lvl-WARNING { background: #3a2a1a; color: #fdba74; }
   .lvl-NOTICE { background: #2d2a1a; color: #fde68a; }
   .lvl-INFO { background: #1a2d3a; color: #7dd3fc; }
-  .lvl-DEBUG, .lvl-EDEBUG { background: #22263a; color: #475569; }
+  .lvl-DEBUG, .lvl-EDEBUG { background: #22263a; color: var(--text-dim); }
 
   .log-line.lvl-row-ERR .lg-msg, .log-line.lvl-row-CRIT .lg-msg,
   .log-line.lvl-row-ALERT .lg-msg, .log-line.lvl-row-EMERG .lg-msg {
@@ -365,9 +365,9 @@
     align-items: center;
     justify-content: space-between;
     padding: 0.5rem 1rem;
-    border-top: 1px solid #2a2d3a;
+    border-top: 1px solid var(--border);
     font-size: 0.78rem;
-    color: #475569;
+    color: var(--text-dim);
   }
 
   .paused-badge {

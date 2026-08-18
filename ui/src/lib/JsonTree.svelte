@@ -68,7 +68,7 @@
     content: '▸';
     display: inline-block;
     width: 1em;
-    color: #475569;
+    color: var(--text-dim);
   }
 
   .json-node[open] > .json-summary::before {
@@ -76,12 +76,12 @@
   }
 
   .json-key {
-    color: #93c5fd;
+    color: var(--accent-2);
     margin-right: 0.35rem;
   }
 
   .json-type {
-    color: #475569;
+    color: var(--text-dim);
   }
 
   .json-children {
@@ -97,7 +97,7 @@
   }
 
   .json-value {
-    color: #e2e8f0;
+    color: var(--text);
   }
 
   .json-value.json-string {
@@ -113,6 +113,6 @@
   }
 
   .json-value.json-null {
-    color: #64748b;
+    color: var(--text-dim);
   }
 </style>

@@ -68,16 +68,16 @@
   .shell {
     display: flex;
     min-height: 100vh;
-    background: #0f1117;
-    color: #e2e8f0;
+    background: var(--bg);
+    color: var(--text);
   }
 
   /* Sidebar */
   .sidebar {
     width: 200px;
     flex-shrink: 0;
-    background: #1a1d27;
-    border-right: 1px solid #2a2d3a;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
   }
@@ -86,8 +86,8 @@
     padding: 1.25rem 1rem;
     font-size: 1.1rem;
     font-weight: 700;
-    color: #e2e8f0;
-    border-bottom: 1px solid #2a2d3a;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
     letter-spacing: 0.03em;
   }
 
@@ -107,7 +107,7 @@
     background: none;
     border: none;
     border-radius: 0;
-    color: #94a3b8;
+    color: var(--text-muted);
     font-size: 0.9rem;
     cursor: pointer;
     transition: background 120ms, color 120ms;
@@ -115,18 +115,18 @@
 
   .nav-item:hover {
     background: #22263a;
-    color: #e2e8f0;
+    color: var(--text);
   }
 
   .nav-item.active {
     background: #1e3a5f;
-    color: #93c5fd;
+    color: var(--accent-2);
     font-weight: 500;
   }
 
   .sidebar-footer {
     padding: 0.75rem 1rem;
-    border-top: 1px solid #2a2d3a;
+    border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -134,7 +134,7 @@
 
   .sidebar-user {
     font-size: 0.8rem;
-    color: #475569;
+    color: var(--text-dim);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -143,9 +143,9 @@
   .logout-btn {
     padding: 0.35rem 0.6rem;
     background: transparent;
-    border: 1px solid #2a2d3a;
+    border: 1px solid var(--border);
     border-radius: 4px;
-    color: #64748b;
+    color: var(--text-dim);
     font-size: 0.8rem;
     cursor: pointer;
     text-align: left;
@@ -153,7 +153,7 @@
   }
 
   .logout-btn:hover {
-    border-color: #ef4444;
+    border-color: var(--bad);
     color: #fca5a5;
   }
 

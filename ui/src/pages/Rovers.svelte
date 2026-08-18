@@ -248,7 +248,7 @@
     align-items: center;
     gap: 0.4rem;
     font-size: 0.85rem;
-    color: #64748b;
+    color: var(--text-dim);
     cursor: pointer;
     user-select: none;
   }
@@ -256,9 +256,9 @@
   button {
     padding: 0.4rem 1rem;
     background: #1e3a5f;
-    border: 1px solid #2563eb;
+    border: 1px solid var(--accent);
     border-radius: 5px;
-    color: #93c5fd;
+    color: var(--accent-2);
     font-size: 0.85rem;
     cursor: pointer;
     transition: background 120ms;
@@ -276,7 +276,7 @@
   .drop-msg {
     margin: 0 0 1rem;
     font-size: 0.85rem;
-    color: #64748b;
+    color: var(--text-dim);
   }
 
   .table-wrap {
@@ -292,16 +292,16 @@
   th {
     text-align: left;
     padding: 0.5rem 0.75rem;
-    color: #475569;
+    color: var(--text-dim);
     font-weight: 500;
-    border-bottom: 1px solid #2a2d3a;
+    border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
 
   td {
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid #1e2130;
-    color: #94a3b8;
+    color: var(--text-muted);
     vertical-align: middle;
   }
 
@@ -310,7 +310,7 @@
   }
 
   tr:hover td {
-    background: #1a1d27;
+    background: var(--surface);
   }
 
   .mono {
@@ -352,7 +352,7 @@
     background: transparent;
     border: 1px solid #1e3a5f;
     border-radius: 4px;
-    color: #93c5fd;
+    color: var(--accent-2);
     font-size: 0.78rem;
     cursor: pointer;
     transition: background 120ms;
@@ -391,7 +391,7 @@
     margin: 0 0 0.6rem;
     font-size: 0.78rem;
     font-weight: 600;
-    color: #64748b;
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
@@ -406,13 +406,13 @@
   .gga-label {
     display: inline-block;
     width: 90px;
-    color: #64748b;
+    color: var(--text-dim);
   }
 
   .near-status {
     margin: 0;
     font-size: 0.8rem;
-    color: #64748b;
+    color: var(--text-dim);
   }
 
   .near-table {
@@ -423,29 +423,29 @@
   .near-table th {
     text-align: left;
     padding: 0.2rem 0.7rem 0.2rem 0;
-    color: #475569;
+    color: var(--text-dim);
     font-weight: 500;
   }
 
   .near-table td {
     padding: 0.15rem 0.7rem 0.15rem 0;
-    color: #94a3b8;
+    color: var(--text-muted);
   }
 
   .near-table tr.winner td {
-    color: #e2e8f0;
+    color: var(--text);
   }
 
   .empty {
     text-align: center;
-    color: #475569;
+    color: var(--text-dim);
     padding: 2rem;
   }
 
   .count {
     margin: 0.75rem 0 0;
     font-size: 0.8rem;
-    color: #475569;
+    color: var(--text-dim);
   }
 
   .error {
@@ -454,7 +454,7 @@
   }
 
   .loading {
-    color: #475569;
+    color: var(--text-dim);
     font-size: 0.9rem;
   }
 </style>
