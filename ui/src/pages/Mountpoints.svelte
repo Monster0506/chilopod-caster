@@ -1,9 +1,11 @@
 <script>
-  import { apiGet, apiPost } from '../lib/api.js';
+  import { apiGet, apiPost, isAdmin } from '../lib/api.js';
   import JsonTree from '../lib/JsonTree.svelte';
   import RevealSecret from '../lib/RevealSecret.svelte';
   import { pushToast } from '../lib/toast.js';
   import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from '@lucide/svelte';
+
+  const admin = isAdmin();
 
   let table = $state(null);
   let net = $state(null);
@@ -265,13 +267,15 @@
       Auto-refresh
     </label>
     <button onclick={fetchAll}>Refresh</button>
-    <button class="add-btn" onclick={() => (showForm = !showForm)} title={showForm ? 'Cancel' : 'Add Mountpoint'}>
-      {#if showForm}<X size={16} />{:else}<Plus size={16} />{/if}
-    </button>
+    {#if admin}
+      <button class="add-btn" onclick={() => (showForm = !showForm)} title={showForm ? 'Cancel' : 'Add Mountpoint'}>
+        {#if showForm}<X size={16} />{:else}<Plus size={16} />{/if}
+      </button>
+    {/if}
   </div>
 </div>
 
-{#if showForm}
+{#if admin && showForm}
   <form class="add-form" onsubmit={(e) => { e.preventDefault(); submitForm(); }}>
     <div class="grid">
       <label>Mountpoint <input required bind:value={form.mountpoint} placeholder="MYBASE" /></label>
@@ -364,7 +368,11 @@
               {:else if authEntry}
                 <span class="mono">
                   {authEntry.user} /
-                  <RevealSecret value={authEntry.password} />
+                  {#if admin}
+                    <RevealSecret value={authEntry.password} />
+                  {:else}
+                    ••••••••
+                  {/if}
                 </span>
               {:else}
                 <span class="auth-na">none set</span>
@@ -387,27 +395,29 @@
                     {#if expandedRtcm === key}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
                   </button>
                 {/if}
-                <button class="auth-btn" onclick={() => startEdit(key, mnt)} title="Edit mountpoint">
-                  <Pencil size={14} />
-                </button>
-                {#if live && strField(mnt.str, 3) === 'RTCM3'}
+                {#if admin}
+                  <button class="auth-btn" onclick={() => startEdit(key, mnt)} title="Edit mountpoint">
+                    <Pencil size={14} />
+                  </button>
+                  {#if live && strField(mnt.str, 3) === 'RTCM3'}
+                    <button
+                      class="detect-btn"
+                      onclick={() => detectTypes(key)}
+                      disabled={detecting.has(key)}
+                      title="Fetch real decoded message types and station position from the live stream, and update this row to match"
+                    >
+                      {detecting.has(key) ? '…' : 'Detect'}
+                    </button>
+                  {/if}
                   <button
-                    class="detect-btn"
-                    onclick={() => detectTypes(key)}
-                    disabled={detecting.has(key)}
-                    title="Fetch real decoded message types and station position from the live stream, and update this row to match"
+                    class="remove-btn"
+                    onclick={() => removeSource(key)}
+                    disabled={removing.has(key)}
+                    title="Remove"
                   >
-                    {detecting.has(key) ? '…' : 'Detect'}
+                    {#if removing.has(key)}…{:else}<Trash2 size={14} />{/if}
                   </button>
                 {/if}
-                <button
-                  class="remove-btn"
-                  onclick={() => removeSource(key)}
-                  disabled={removing.has(key)}
-                  title="Remove"
-                >
-                  {#if removing.has(key)}…{:else}<Trash2 size={14} />{/if}
-                </button>
               {/if}
             </td>
           </tr>
