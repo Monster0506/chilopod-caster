@@ -12,6 +12,7 @@
 #include "conf.h"
 #include "adm.h"
 #include "api.h"
+#include "auth.h"
 #include "hash.h"
 #include "livesource.h"
 #include "ntripsrv.h"
@@ -191,7 +192,8 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 			password = hash_table_get(req->hash, "password");
 		}
 
-		if (!user || !password || !check_password(st, st->config->admin_user, user, password)) {
+		st->admin_role = resolve_admin_role(st, user, password);
+		if (st->admin_role == ADMIN_ROLE_NONE) {
 			request_free(req);
 			*err = 401;
 			return -1;
@@ -214,6 +216,7 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 			{"/api/v1/sourcetables", "GET", sourcetable_list_json},
 			{"/api/v1/near", "GET", api_near_json},
 			{"/api/v1/alarms", "GET", api_alarms_json},
+			{"/api/v1/whoami", "GET", api_whoami_json},
 			{"/api/v1/reload", "POST", api_reload_json},
 			{"/api/v1/drop", "POST", api_drop_json},
 			{"/api/v1/sources", "POST", api_add_source_json},
@@ -252,6 +255,13 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 			return -1;
 		}
 
+		/* Every POST route mutates something -- viewers get read-only access */
+		if (!strcmp(method, "POST") && st->admin_role != ADMIN_ROLE_ADMIN) {
+			request_free(req);
+			*err = 403;
+			return -1;
+		}
+
 		/* Execute */
 		joblist_append_ntrip_unlocked_content(st->caster->joblist, ntripsrv_deferred_output, st, calls[i].content_cb, req);
 		return 0;
@@ -273,9 +283,10 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 		return -1;
 	}
 
-	/* Legacy access */
+	/* Legacy access -- read-only routes, any authenticated role is fine */
 
-	if (!st->user || !check_password(st, st->config->admin_user, st->user, st->password)) {
+	st->admin_role = st->user ? resolve_admin_role(st, st->user, st->password) : ADMIN_ROLE_NONE;
+	if (st->admin_role == ADMIN_ROLE_NONE) {
 		request_free(req);
 		int www_auth_value_len = strlen(root_uri) + 15;
 		char *www_auth_value = (char *)strmalloc(www_auth_value_len);
