@@ -700,6 +700,12 @@ struct config *config_parse(const char *filename, long long config_gen) {
 		if (this->alarms->station_online && !this->alarms->station_online->after_minutes)
 			this->alarms->station_online->after_minutes = default_config_alarms_threshold.after_minutes;
 
+		if (this->alarms->low_sv_count && !this->sidecar_stats_filename) {
+			_log(CYAML_LOG_ERROR, "alarms.low_sv_count is enabled but no sidecar_stats_file is configured");
+			config_free(this);
+			return NULL;
+		}
+
 		if (!this->alarms->subject || !this->alarms->ruckus_path || !this->alarms->email_template) {
 			config_free(this);
 			return NULL;
