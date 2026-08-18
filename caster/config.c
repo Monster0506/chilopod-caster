@@ -103,7 +103,6 @@ static struct config_threads default_config_threads = {
 
 static struct config_alarms default_config_alarms = {
 	.subject = "Chilopod Alarm",
-	.min_interval_minutes = 15,
 	.ruckus_path = "/usr/local/sbin/ruckus",
 	.email_template = "alarm-email.html",
 };
@@ -690,8 +689,6 @@ struct config *config_parse(const char *filename, long long config_gen) {
 	if (this->alarms) {
 		if (!this->alarms->subject)
 			this->alarms->subject = mystrdup(default_config_alarms.subject);
-		if (!this->alarms->min_interval_minutes)
-			this->alarms->min_interval_minutes = default_config_alarms.min_interval_minutes;
 		if (!this->alarms->ruckus_path)
 			this->alarms->ruckus_path = mystrdup(default_config_alarms.ruckus_path);
 		if (!this->alarms->email_template)
