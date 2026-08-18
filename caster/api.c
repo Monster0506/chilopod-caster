@@ -1262,6 +1262,19 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 		changed = 1; yaml_changed = 1;
 	}
 
+	if (hash_table_get(req->hash, "alarms.station_offline.enable")) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		if (!a->station_offline)
+			a->station_offline = (struct config_alarms_threshold *)calloc(1, sizeof(struct config_alarms_threshold));
+		if (!a->station_offline) { config_free_edit(edit); return api_error_json("out of memory"); }
+		changed = 1; yaml_changed = 1;
+	}
+	if (hash_table_get(req->hash, "alarms.station_offline.remove") && edit->alarms && edit->alarms->station_offline) {
+		free(edit->alarms->station_offline);
+		edit->alarms->station_offline = NULL;
+		changed = 1; yaml_changed = 1;
+	}
 	v = (char *)hash_table_get(req->hash, "alarms.station_offline.after_minutes");
 	if (v) {
 		struct config_alarms *a = ensure_alarms(edit);
@@ -1272,6 +1285,20 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 			config_free_edit(edit);
 			return api_error_json(a->station_offline ? errmsg : "out of memory");
 		}
+		changed = 1; yaml_changed = 1;
+	}
+
+	if (hash_table_get(req->hash, "alarms.station_online.enable")) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		if (!a->station_online)
+			a->station_online = (struct config_alarms_threshold *)calloc(1, sizeof(struct config_alarms_threshold));
+		if (!a->station_online) { config_free_edit(edit); return api_error_json("out of memory"); }
+		changed = 1; yaml_changed = 1;
+	}
+	if (hash_table_get(req->hash, "alarms.station_online.remove") && edit->alarms && edit->alarms->station_online) {
+		free(edit->alarms->station_online);
+		edit->alarms->station_online = NULL;
 		changed = 1; yaml_changed = 1;
 	}
 	v = (char *)hash_table_get(req->hash, "alarms.station_online.after_minutes");
@@ -1287,6 +1314,19 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 		changed = 1; yaml_changed = 1;
 	}
 
+	if (hash_table_get(req->hash, "alarms.low_sv_count.enable")) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		if (!a->low_sv_count)
+			a->low_sv_count = (struct config_alarms_low_sv *)calloc(1, sizeof(struct config_alarms_low_sv));
+		if (!a->low_sv_count) { config_free_edit(edit); return api_error_json("out of memory"); }
+		changed = 1; yaml_changed = 1;
+	}
+	if (hash_table_get(req->hash, "alarms.low_sv_count.remove") && edit->alarms && edit->alarms->low_sv_count) {
+		free(edit->alarms->low_sv_count);
+		edit->alarms->low_sv_count = NULL;
+		changed = 1; yaml_changed = 1;
+	}
 	char *lv_min_sats = (char *)hash_table_get(req->hash, "alarms.low_sv_count.min_sats");
 	char *lv_after = (char *)hash_table_get(req->hash, "alarms.low_sv_count.after_minutes");
 	if (lv_min_sats || lv_after) {
@@ -1306,6 +1346,19 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 		changed = 1; yaml_changed = 1;
 	}
 
+	if (hash_table_get(req->hash, "alarms.position_drift.enable")) {
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		if (!a->position_drift)
+			a->position_drift = (struct config_alarms_position_drift *)calloc(1, sizeof(struct config_alarms_position_drift));
+		if (!a->position_drift) { config_free_edit(edit); return api_error_json("out of memory"); }
+		changed = 1; yaml_changed = 1;
+	}
+	if (hash_table_get(req->hash, "alarms.position_drift.remove") && edit->alarms && edit->alarms->position_drift) {
+		free(edit->alarms->position_drift);
+		edit->alarms->position_drift = NULL;
+		changed = 1; yaml_changed = 1;
+	}
 	char *pd_lat = (char *)hash_table_get(req->hash, "alarms.position_drift.lat_mm");
 	char *pd_lon = (char *)hash_table_get(req->hash, "alarms.position_drift.lon_mm");
 	char *pd_alt = (char *)hash_table_get(req->hash, "alarms.position_drift.alt_mm");

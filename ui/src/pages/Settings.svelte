@@ -170,6 +170,43 @@
     r.alarm_types = next.length === ALARM_TYPES.length ? null : next;
   }
 
+  let togglingAlarmType = $state(null);
+  let alarmTypeMsg = $state('');
+
+  async function enableAlarmType(key) {
+    togglingAlarmType = key;
+    alarmTypeMsg = '';
+    try {
+      const res = await apiPost('settings', { [`alarms.${key}.enable`]: '1' });
+      if (res.error) {
+        alarmTypeMsg = res.error;
+      } else {
+        await fetchSettings();
+      }
+    } catch (e) {
+      alarmTypeMsg = `Failed: ${e.message}`;
+    } finally {
+      togglingAlarmType = null;
+    }
+  }
+
+  async function disableAlarmType(key) {
+    togglingAlarmType = key;
+    alarmTypeMsg = '';
+    try {
+      const res = await apiPost('settings', { [`alarms.${key}.remove`]: '1' });
+      if (res.error) {
+        alarmTypeMsg = res.error;
+      } else {
+        await fetchSettings();
+      }
+    } catch (e) {
+      alarmTypeMsg = `Failed: ${e.message}`;
+    } finally {
+      togglingAlarmType = null;
+    }
+  }
+
   async function saveAlarms() {
     savingSection = 'alarms';
     sectionMsg = { ...sectionMsg, alarms: '' };
@@ -407,9 +444,25 @@
               <label>Drift after (minutes) <input type="number" bind:value={form.alarms.position_drift.after_minutes} /></label>
             {/if}
           </div>
-          {#if !form.alarms.station_offline && !form.alarms.station_online && !form.alarms.low_sv_count && !form.alarms.position_drift}
-            <p class="field-hint">No alarm types are enabled. Add a threshold block (e.g. station_offline) to caster.yaml to enable one.</p>
-          {/if}
+
+          <h4>Alarm types</h4>
+          <div class="recipient-list">
+            {#each ALARM_TYPES as t (t.key)}
+              <div class="recipient-row">
+                <span>{t.label}</span>
+                {#if form.alarms[t.key]}
+                  <button type="button" class="remove-btn" onclick={() => disableAlarmType(t.key)} disabled={togglingAlarmType === t.key}>
+                    {togglingAlarmType === t.key ? 'Disabling…' : 'Disable'}
+                  </button>
+                {:else}
+                  <button type="button" onclick={() => enableAlarmType(t.key)} disabled={togglingAlarmType === t.key}>
+                    {togglingAlarmType === t.key ? 'Enabling…' : 'Enable'}
+                  </button>
+                {/if}
+              </div>
+            {/each}
+          </div>
+          {#if alarmTypeMsg}<div class="msg">{alarmTypeMsg}</div>{/if}
 
           <h4>Per-base alarm filters</h4>
           {#if form.alarms.mountpoints.length === 0}
