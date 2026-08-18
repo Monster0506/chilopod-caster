@@ -1,5 +1,6 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
+  import RevealSecret from '../lib/RevealSecret.svelte';
 
   let form = $state({});
   let error = $state('');
@@ -15,22 +16,6 @@
     } finally {
       loading = false;
     }
-  }
-
-  let revealedRoverUsers = $state(new Set());
-  function toggleRoverReveal(user) {
-    const next = new Set(revealedRoverUsers);
-    if (next.has(user)) next.delete(user);
-    else next.add(user);
-    revealedRoverUsers = next;
-  }
-
-  let revealedSmtpHosts = $state(new Set());
-  function toggleSmtpReveal(host) {
-    const next = new Set(revealedSmtpHosts);
-    if (next.has(host)) next.delete(host);
-    else next.add(host);
-    revealedSmtpHosts = next;
   }
 
   let roverAuthFilenameInput = $state('');
@@ -225,9 +210,7 @@
                   {a.user}
                 </label>
                 <span class="mono">
-                  <button type="button" class="reveal-btn" onclick={() => toggleRoverReveal(a.user)} title={revealedRoverUsers.has(a.user) ? 'Click to hide' : 'Click to reveal'}>
-                    {revealedRoverUsers.has(a.user) ? a.password : '••••••••'}
-                  </button>
+                  <RevealSecret value={a.password} />
                 </span>
                 <label>New password <input type="text" bind:value={roverPasswordInputs[a.user]} placeholder="(unchanged)" /></label>
                 <button type="button" onclick={() => setRoverPassword(a.user)} disabled={!roverPasswordInputs[a.user] || settingRoverPasswordUser === a.user}>
@@ -265,9 +248,7 @@
                 <span class="mountpoint-name">{c.host}</span>
                 <span class="field-hint">{c.user}</span>
                 <span class="mono">
-                  <button type="button" class="reveal-btn" onclick={() => toggleSmtpReveal(c.host)} title={revealedSmtpHosts.has(c.host) ? 'Click to hide' : 'Click to reveal'}>
-                    {revealedSmtpHosts.has(c.host) ? c.password : '••••••••'}
-                  </button>
+                  <RevealSecret value={c.password} />
                 </span>
                 <button type="button" class="remove-btn" onclick={() => removeSmtpAuthCredential(c.host)} disabled={removingSmtpAuthHost === c.host}>
                   {removingSmtpAuthHost === c.host ? 'Removing…' : 'Remove'}
@@ -384,20 +365,6 @@
   .mono {
     font-family: monospace;
     color: var(--text);
-  }
-
-  .reveal-btn {
-    padding: 0;
-    background: none;
-    border: none;
-    color: inherit;
-    font: inherit;
-    font-family: monospace;
-    cursor: pointer;
-  }
-
-  .reveal-btn:hover {
-    color: var(--accent-2);
   }
 
   .remove-btn {

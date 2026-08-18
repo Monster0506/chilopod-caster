@@ -1,6 +1,7 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
   import JsonTree from '../lib/JsonTree.svelte';
+  import RevealSecret from '../lib/RevealSecret.svelte';
   import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from '@lucide/svelte';
 
   let table = $state(null);
@@ -18,7 +19,6 @@
   let removeMsg = $state('');
   let detecting = $state(new Set());
   let detectMsg = $state('');
-  let revealed = $state(new Set());
 
   let editingMountpoint = $state(null);
   let editForm = $state({ group: '', identifier: '', auth_user: '', auth_password: '' });
@@ -202,13 +202,6 @@
     }
   }
 
-  function toggleReveal(mountpoint) {
-    const next = new Set(revealed);
-    if (next.has(mountpoint)) next.delete(mountpoint);
-    else next.add(mountpoint);
-    revealed = next;
-  }
-
   function startEdit(mountpoint, mnt) {
     const existingAuth = authFor(mountpoint);
     editingMountpoint = mountpoint;
@@ -380,14 +373,7 @@
               {:else if authEntry}
                 <span class="mono">
                   {authEntry.user} /
-                  <button
-                    type="button"
-                    class="reveal-btn"
-                    onclick={() => toggleReveal(key)}
-                    title={revealed.has(key) ? 'Click to hide' : 'Click to reveal'}
-                  >
-                    {revealed.has(key) ? authEntry.password : '••••••••'}
-                  </button>
+                  <RevealSecret value={authEntry.password} />
                 </span>
               {:else}
                 <span class="auth-na">none set</span>
@@ -701,20 +687,6 @@
   .auth-na {
     color: var(--text-dim);
     font-size: 0.78rem;
-  }
-
-  .reveal-btn {
-    padding: 0;
-    background: none;
-    border: none;
-    color: inherit;
-    font: inherit;
-    font-family: monospace;
-    cursor: pointer;
-  }
-
-  .reveal-btn:hover {
-    color: var(--text);
   }
 
   .auth-btn {
