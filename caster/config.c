@@ -112,10 +112,6 @@ static struct config_alarms_smtp default_config_alarms_smtp = {
 	.port = 587,
 };
 
-static struct config_alarms_low_sv default_config_alarms_low_sv = {
-	.after_minutes = 2,
-};
-
 static struct config_alarms_threshold default_config_alarms_threshold = {
 	.after_minutes = 5,
 };
@@ -702,8 +698,6 @@ struct config *config_parse(const char *filename, long long config_gen) {
 			this->alarms->email_template = mystrdup(default_config_alarms.email_template);
 		if (!this->alarms->smtp->port)
 			this->alarms->smtp->port = default_config_alarms_smtp.port;
-		if (this->alarms->low_sv_count && !this->alarms->low_sv_count->after_minutes)
-			this->alarms->low_sv_count->after_minutes = default_config_alarms_low_sv.after_minutes;
 		if (this->alarms->station_offline && !this->alarms->station_offline->after_minutes)
 			this->alarms->station_offline->after_minutes = default_config_alarms_threshold.after_minutes;
 		if (this->alarms->station_online && !this->alarms->station_online->after_minutes)
