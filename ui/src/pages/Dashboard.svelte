@@ -368,12 +368,12 @@
         {:else}
           {#each alarmEntries as a, i (a.time + i)}
             <div class="list-row alarm-row">
-              <span class="dot" class:good={a.sent} class:bad={!a.sent}></span>
+              <span class="dot" class:good={a.sent} class:warn={!a.sent && a.suppressed} class:bad={!a.sent && !a.suppressed}></span>
               <span class="t">{formatAgo(a.time)}</span>
               <span class="alarm-body">
                 <span class="alarm-mp mono">{a.mountpoint}</span>
                 <span class="alarm-type">{alarmTypeLabel(a.type)}</span>
-                {#if !a.sent}<span class="alarm-fail">send failed</span>{/if}
+                {#if !a.sent}<span class="alarm-fail">{a.suppressed ? 'send suppressed' : 'send failed'}</span>{/if}
               </span>
             </div>
           {/each}

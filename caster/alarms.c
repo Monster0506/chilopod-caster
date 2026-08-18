@@ -257,7 +257,7 @@ static void alarm_send_stderr_cb(evutil_socket_t fd, short event, void *arg) {
 
 /* Record one outcome into the ring buffer. Thread-safe. */
 static void alarm_ring_add(struct caster_state *caster, const char *mountpoint, enum alarm_event_type type,
-		const char *summary, int sent, int exitcode, const char *error) {
+		const char *summary, int sent, int suppressed, int exitcode, const char *error) {
 	struct alarms_state *as = caster->alarms;
 
 	P_RWLOCK_WRLOCK(&as->ring_lock);
@@ -267,6 +267,7 @@ static void alarm_ring_add(struct caster_state *caster, const char *mountpoint, 
 	e->type = type;
 	snprintf(e->summary, sizeof e->summary, "%s", summary ? summary : "");
 	e->sent = sent;
+	e->suppressed = suppressed;
 	e->exitcode = exitcode;
 	snprintf(e->error, sizeof e->error, "%s", error ? error : "");
 	as->ring_head = (as->ring_head + 1) % ALARM_RING_SIZE;
@@ -292,8 +293,10 @@ json_object *alarms_ring_json(struct caster_state *caster) {
 		json_object_object_add_ex(j, "summary", json_object_new_string(e->summary), JSON_C_CONSTANT_NEW);
 		json_object_object_add_ex(j, "sent", json_object_new_boolean(e->sent), JSON_C_CONSTANT_NEW);
 		json_object_object_add_ex(j, "exit_code", json_object_new_int(e->exitcode), JSON_C_CONSTANT_NEW);
-		if (!e->sent)
+		if (!e->sent) {
+			json_object_object_add_ex(j, "suppressed", json_object_new_boolean(e->suppressed), JSON_C_CONSTANT_NEW);
 			json_object_object_add_ex(j, "error", json_object_new_string(e->error), JSON_C_CONSTANT_NEW);
+		}
 		timeval_to_json(&e->time, j, "time");
 		json_object_array_add(jarr, j);
 		idx = (idx - 1 + ALARM_RING_SIZE) % ALARM_RING_SIZE;
@@ -334,7 +337,7 @@ static void alarms_sigchld_cb(evutil_socket_t fd, short event, void *arg) {
 					exitcode, alarm_event_names[as->type], as->mountpoint,
 					as->errlen ? as->errbuf : "(no output)");
 
-			alarm_ring_add(caster, as->mountpoint, as->type, as->summary, sent, exitcode,
+			alarm_ring_add(caster, as->mountpoint, as->type, as->summary, sent, 0, exitcode,
 				as->errlen ? as->errbuf : "(no output)");
 
 			event_free(as->stderr_event);
@@ -435,7 +438,7 @@ static void fire_alarm(struct caster_state *caster, struct config_alarms *alarms
 	if (!any_recipient) {
 		logfmt(&caster->flog, LOG_INFO, "alarm: no recipients subscribed to %s, skipping send for %s",
 			alarm_event_names[type], mountpoint);
-		alarm_ring_add(caster, mountpoint, type, summary, 0, -1, "no recipients subscribed to this alarm type");
+		alarm_ring_add(caster, mountpoint, type, summary, 0, 1, -1, "no recipients subscribed to this alarm type");
 		return;
 	}
 

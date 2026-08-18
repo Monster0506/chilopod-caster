@@ -60,6 +60,7 @@ struct alarm_ring_entry {
 	enum alarm_event_type type;
 	char summary[256];
 	int sent;		// 1 = accepted by the remote server, 0 = failed
+	int suppressed;		// 1 = not sent on purpose (e.g. no subscribed recipients), not a failure
 	int exitcode;
 	char error[512];	// ruckus's stderr, if sent == 0
 };
