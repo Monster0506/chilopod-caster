@@ -151,7 +151,7 @@
       marker.bindPopup(
         `<b>${escapeHtml(b.key)}</b><br>` +
           `${escapeHtml(strField(b.str, 2) || 'Base station')}<br>` +
-          `Status: ${b.live ? 'live' : 'declared, offline'}<br>` +
+          `Status: <span class="badge ${b.live ? 'badge-live' : 'badge-offline'}">${b.live ? 'live' : 'declared, offline'}</span><br>` +
           `Subscribers: ${b.subscribers}<br>` +
           `<span class="map-popup-mono">${b.lat.toFixed(5)}, ${b.lon.toFixed(5)}</span>`,
         { autoPan: false }
