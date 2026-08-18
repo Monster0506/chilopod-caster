@@ -357,10 +357,12 @@ static void spawn_ruckus(struct caster_state *caster, const char *ruckus_path,
 
 	if (pipe(stdin_pipe) < 0) {
 		logfmt(&caster->flog, LOG_ERR, "alarm: pipe() failed: %s", strerror(errno));
+		alarm_ring_add(caster, mountpoint, type, summary, 0, 0, -1, strerror(errno));
 		return;
 	}
 	if (pipe(stderr_pipe) < 0) {
 		logfmt(&caster->flog, LOG_ERR, "alarm: pipe() failed: %s", strerror(errno));
+		alarm_ring_add(caster, mountpoint, type, summary, 0, 0, -1, strerror(errno));
 		close(stdin_pipe[0]); close(stdin_pipe[1]);
 		return;
 	}
@@ -368,6 +370,7 @@ static void spawn_ruckus(struct caster_state *caster, const char *ruckus_path,
 	pid_t pid = fork();
 	if (pid < 0) {
 		logfmt(&caster->flog, LOG_ERR, "alarm: fork() failed: %s", strerror(errno));
+		alarm_ring_add(caster, mountpoint, type, summary, 0, 0, -1, strerror(errno));
 		close(stdin_pipe[0]); close(stdin_pipe[1]);
 		close(stderr_pipe[0]); close(stderr_pipe[1]);
 		return;
