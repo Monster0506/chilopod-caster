@@ -2,21 +2,28 @@ export function getCredentials() {
   return {
     user: sessionStorage.getItem('user'),
     password: sessionStorage.getItem('password'),
+    role: sessionStorage.getItem('role') ?? 'admin',
   };
 }
 
-export function setCredentials(user, password) {
+export function setCredentials(user, password, role = 'admin') {
   sessionStorage.setItem('user', user);
   sessionStorage.setItem('password', password);
+  sessionStorage.setItem('role', role);
 }
 
 export function clearCredentials() {
   sessionStorage.removeItem('user');
   sessionStorage.removeItem('password');
+  sessionStorage.removeItem('role');
 }
 
 export function isLoggedIn() {
   return !!sessionStorage.getItem('user');
+}
+
+export function isAdmin() {
+  return getCredentials().role === 'admin';
 }
 
 function authHeader() {
