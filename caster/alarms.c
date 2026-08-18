@@ -468,15 +468,25 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 
 	/* station_offline / station_online */
 	if (is_live) {
-		if (state->was_live == 0 && alarms->station_online && mountpoint_wants(alarms, mountpoint, ALARM_STATION_ONLINE)
-				&& alarm_rate_ok(state, ALARM_STATION_ONLINE, now, alarms->min_interval_minutes)) {
-			char body[256];
-			snprintf(body, sizeof body, "Station %s is back online.", mountpoint);
-			fire_alarm(caster, alarms, mountpoint, ALARM_STATION_ONLINE, "back online", body);
-			state->last_sent[ALARM_STATION_ONLINE] = *now;
+		if (state->was_live == 0) {
+			if (state->online_since.tv_sec == 0)
+				state->online_since = *now;
+			int online_enabled = alarms->station_online && mountpoint_wants(alarms, mountpoint, ALARM_STATION_ONLINE);
+			double minutes_up = online_enabled ? timeval_diff_minutes(now, &state->online_since) : 0;
+			if (!online_enabled || minutes_up >= alarms->station_online->after_minutes) {
+				if (online_enabled && alarm_rate_ok(state, ALARM_STATION_ONLINE, now, alarms->min_interval_minutes)) {
+					char body[256];
+					snprintf(body, sizeof body, "Station %s is back online.", mountpoint);
+					fire_alarm(caster, alarms, mountpoint, ALARM_STATION_ONLINE, "back online", body);
+					state->last_sent[ALARM_STATION_ONLINE] = *now;
+				}
+				state->was_live = 1;
+			}
 		}
 		state->offline_since.tv_sec = 0;
 	} else {
+		state->online_since.tv_sec = 0;
+		state->was_live = 0;
 		if (state->offline_since.tv_sec == 0)
 			state->offline_since = *now;
 		if (alarms->station_offline && mountpoint_wants(alarms, mountpoint, ALARM_STATION_OFFLINE)) {
@@ -490,7 +500,6 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 			}
 		}
 	}
-	state->was_live = is_live;
 
 	/* low_sv_count */
 	if (alarms->low_sv_count && mountpoint_wants(alarms, mountpoint, ALARM_LOW_SV) && sidecar_stats) {
