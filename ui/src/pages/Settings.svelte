@@ -315,13 +315,7 @@
 
   function toggleMountpointFilterType(m, key) {
     const current = m.alarm_types ?? [];
-    const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
-    if (next.length === 0) {
-      mountpointFilterMsg = 'A mountpoint filter must keep at least one alarm type checked -- use Remove to delete it instead.';
-      return;
-    }
-    mountpointFilterMsg = '';
-    m.alarm_types = next;
+    m.alarm_types = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
   }
 
   let newMountpointName = $state('');
@@ -338,7 +332,6 @@
 
   async function addMountpointFilter() {
     if (!newMountpointName) { mountpointFilterMsg = 'Mountpoint name is required.'; return; }
-    if (newMountpointTypes.length === 0) { mountpointFilterMsg = 'Select at least one alarm type.'; return; }
     addingMountpointFilter = true;
     mountpointFilterMsg = '';
     try {
@@ -484,6 +477,9 @@
                       {t.label}
                     </label>
                   {/each}
+                  {#if (m.alarm_types ?? []).length === 0}
+                    <span class="field-hint">All alarms suppressed for this mountpoint.</span>
+                  {/if}
                 </div>
               {/each}
             </div>
@@ -507,6 +503,9 @@
             {/each}
             <button type="button" onclick={addMountpointFilter} disabled={addingMountpointFilter}>{addingMountpointFilter ? 'Adding…' : '+ Add filter'}</button>
           </div>
+          {#if newMountpointTypes.length === 0}
+            <p class="field-hint">No types checked -- this will suppress every alarm for that mountpoint.</p>
+          {/if}
           {#if mountpointFilterMsg}<div class="msg">{mountpointFilterMsg}</div>{/if}
 
           <h4>Recipients</h4>

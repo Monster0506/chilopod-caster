@@ -72,8 +72,6 @@ static int mountpoint_wants(struct config_alarms *alarms, const char *mountpoint
 	for (int i = 0; i < alarms->mountpoints_count; i++) {
 		if (strcmp(alarms->mountpoints[i].mountpoint, mountpoint))
 			continue;
-		if (!alarms->mountpoints[i].alarm_types)
-			return 1;
 		for (int j = 0; j < alarms->mountpoints[i].alarm_types_count; j++)
 			if (!strcmp(alarms->mountpoints[i].alarm_types[j], alarm_event_names[type]))
 				return 1;

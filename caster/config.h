@@ -196,8 +196,10 @@ struct config_alarms_position_drift {
 
 /*
  * Restricts which alarm types are evaluated at all for one mountpoint.
- * A mountpoint absent from config_alarms.mountpoints[], or present with
- * alarm_types == NULL, gets every alarm type (the default, unfiltered).
+ * A mountpoint absent from config_alarms.mountpoints[] gets every alarm
+ * type (the default, unfiltered). A mountpoint present with an empty
+ * alarm_types gets none -- this is how a single mountpoint is silenced
+ * without affecting any other mountpoint.
  */
 struct config_alarms_mountpoint {
 	const char *mountpoint;

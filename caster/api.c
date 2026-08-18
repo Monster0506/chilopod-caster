@@ -1502,7 +1502,7 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 			config_free_edit(edit);
 			return api_error_json("invalid or empty alarms.mountpoints.add.mountpoint");
 		}
-		if (!mountpoints_add_types || !*mountpoints_add_types) {
+		if (!mountpoints_add_types) {
 			config_free_edit(edit);
 			return api_error_json("alarms.mountpoints.add.alarm_types is required");
 		}
