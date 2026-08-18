@@ -330,9 +330,13 @@ static void alarms_sigchld_cb(evutil_socket_t fd, short event, void *arg) {
 
 			int exitcode = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 			int sent = (exitcode == 0);
-			if (sent)
+			if (sent) {
 				logfmt(&caster->flog, LOG_INFO, "alarm: sent %s for %s", alarm_event_names[as->type], as->mountpoint);
-			else
+				struct alarm_mountpoint_state *state =
+					(struct alarm_mountpoint_state *)hash_table_get(caster->alarms->mountpoints, as->mountpoint);
+				if (state)
+					gettimeofday(&state->last_sent[as->type], NULL);
+			} else
 				logfmt(&caster->flog, LOG_ERR, "alarm: ruckus failed (exit %d) for %s %s: %s",
 					exitcode, alarm_event_names[as->type], as->mountpoint,
 					as->errlen ? as->errbuf : "(no output)");
@@ -430,7 +434,10 @@ static void spawn_ruckus(struct caster_state *caster, const char *ruckus_path,
 	logfmt(&caster->flog, LOG_INFO, "alarm: spawned ruckus pid %d for %s %s", pid, alarm_event_names[type], mountpoint);
 }
 
-static void fire_alarm(struct caster_state *caster, struct config_alarms *alarms,
+/* Returns 1 if the outcome is already final and safe to rate-limit on, 0 if
+ * a send is now in flight and the rate limit must wait for its confirmed
+ * outcome (see alarms_sigchld_cb). */
+static int fire_alarm(struct caster_state *caster, struct config_alarms *alarms,
 		const char *mountpoint, enum alarm_event_type type, const char *summary, const char *body) {
 	char subject[256];
 	snprintf(subject, sizeof subject, "%s: %s - %s", alarms->subject, mountpoint, summary);
@@ -442,7 +449,7 @@ static void fire_alarm(struct caster_state *caster, struct config_alarms *alarms
 		logfmt(&caster->flog, LOG_INFO, "alarm: no recipients subscribed to %s, skipping send for %s",
 			alarm_event_names[type], mountpoint);
 		alarm_ring_add(caster, mountpoint, type, summary, 0, 1, -1, "no recipients subscribed to this alarm type");
-		return;
+		return 1;
 	}
 
 	char *html_body = build_html_body(caster, alarms, type, mountpoint, body);
@@ -452,10 +459,12 @@ static void fire_alarm(struct caster_state *caster, struct config_alarms *alarms
 	free(html_body);
 	if (!payload) {
 		logfmt(&caster->flog, LOG_ERR, "alarm: failed to build payload for %s %s", mountpoint, alarm_event_names[type]);
-		return;
+		alarm_ring_add(caster, mountpoint, type, summary, 0, 0, -1, "failed to build email payload");
+		return 0;
 	}
 	spawn_ruckus(caster, alarms->ruckus_path, mountpoint, type, payload, body);
 	strfree(payload);
+	return 0;
 }
 
 static void alarms_check_one(struct caster_state *caster, struct config_alarms *alarms,
@@ -483,8 +492,8 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 				if (online_enabled && alarm_rate_ok(state, ALARM_STATION_ONLINE, now, alarms->min_interval_minutes)) {
 					char body[256];
 					snprintf(body, sizeof body, "Station %s is back online.", mountpoint);
-					fire_alarm(caster, alarms, mountpoint, ALARM_STATION_ONLINE, "back online", body);
-					state->last_sent[ALARM_STATION_ONLINE] = *now;
+					if (fire_alarm(caster, alarms, mountpoint, ALARM_STATION_ONLINE, "back online", body))
+						state->last_sent[ALARM_STATION_ONLINE] = *now;
 				}
 				state->was_live = 1;
 			}
@@ -501,8 +510,8 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 					&& alarm_rate_ok(state, ALARM_STATION_OFFLINE, now, alarms->min_interval_minutes)) {
 				char body[256];
 				snprintf(body, sizeof body, "Station %s has been offline for %.0f minutes.", mountpoint, minutes_down);
-				fire_alarm(caster, alarms, mountpoint, ALARM_STATION_OFFLINE, "offline", body);
-				state->last_sent[ALARM_STATION_OFFLINE] = *now;
+				if (fire_alarm(caster, alarms, mountpoint, ALARM_STATION_OFFLINE, "offline", body))
+					state->last_sent[ALARM_STATION_OFFLINE] = *now;
 			}
 		}
 	}
@@ -523,8 +532,8 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 					snprintf(body, sizeof body,
 						"Station %s is tracking only %d satellites (threshold %d) for %.0f minutes.",
 						mountpoint, sv, alarms->low_sv_count->min_sats, minutes);
-					fire_alarm(caster, alarms, mountpoint, ALARM_LOW_SV, "low satellite count", body);
-					state->last_sent[ALARM_LOW_SV] = *now;
+					if (fire_alarm(caster, alarms, mountpoint, ALARM_LOW_SV, "low satellite count", body))
+						state->last_sent[ALARM_LOW_SV] = *now;
 				}
 			} else
 				state->low_sv_since.tv_sec = 0;
@@ -561,8 +570,8 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 					&& alarm_rate_ok(state, ALARM_POSITION_DRIFT, now, alarms->min_interval_minutes)) {
 				char body[300];
 				snprintf(body, sizeof body, "Station %s position drift: %s.", mountpoint, reason);
-				fire_alarm(caster, alarms, mountpoint, ALARM_POSITION_DRIFT, "position drift", body);
-				state->last_sent[ALARM_POSITION_DRIFT] = *now;
+				if (fire_alarm(caster, alarms, mountpoint, ALARM_POSITION_DRIFT, "position drift", body))
+					state->last_sent[ALARM_POSITION_DRIFT] = *now;
 			}
 		} else
 			state->drift_since.tv_sec = 0;
