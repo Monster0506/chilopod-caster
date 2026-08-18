@@ -201,6 +201,7 @@ struct ntrip_state {
 	 */
 	int scheme_basic;			// Flag: "Basic" or "internal" auth scheme
 	char *user, *password;
+	int admin_role;				// enum admin_role (auth.h), resolved for /adm requests
 	pos_t mountpoint_pos;			// geographical position of the current source
 	pos_t tmp_pos;				// temporary: future source position redistribute_switch_source()
 	char user_agent_ntrip;			// Flag: set if the User-Agent header
