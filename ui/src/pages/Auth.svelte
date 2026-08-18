@@ -1,6 +1,7 @@
 <script>
   import { apiGet, apiPost } from '../lib/api.js';
   import RevealSecret from '../lib/RevealSecret.svelte';
+  import Switch from '../lib/Switch.svelte';
 
   let form = $state({});
   let error = $state('');
@@ -206,7 +207,7 @@
             {#each form.rover_auth.accounts as a (a.user)}
               <div class="recipient-row">
                 <label class="checkbox-label">
-                  <input type="checkbox" checked={a.enabled} onchange={() => toggleRoverAccount(a)} />
+                  <Switch checked={a.enabled} onchange={() => toggleRoverAccount(a)} />
                   {a.user}
                 </label>
                 <span class="mono">
@@ -390,11 +391,6 @@
     gap: 0.35rem;
     font-size: 0.78rem;
     color: var(--text-muted);
-  }
-
-  .checkbox-label input[type='checkbox'] {
-    width: auto;
-    accent-color: var(--accent);
   }
 
   .grid {

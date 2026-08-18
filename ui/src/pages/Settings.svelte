@@ -1,5 +1,6 @@
 <script>
   import { apiGet, apiPost, getCredentials, setCredentials } from '../lib/api.js';
+  import Switch from '../lib/Switch.svelte';
 
   const LOG_LEVELS = ['EMERG', 'ALERT', 'CRIT', 'ERR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG', 'EDEBUG'];
 
@@ -392,10 +393,7 @@
             {#each ALARM_TYPES as t (t.key)}
               <label class="switch-row">
                 <span>{t.label}</span>
-                <span class="switch">
-                  <input type="checkbox" checked={!!form.alarms[t.key]} onchange={() => toggleAlarmType(t.key)} />
-                  <span class="switch-track"></span>
-                </span>
+                <Switch checked={!!form.alarms[t.key]} onchange={() => toggleAlarmType(t.key)} />
               </label>
             {/each}
           </div>
@@ -737,63 +735,6 @@
     color: var(--text);
     font-size: 0.9rem;
     cursor: pointer;
-  }
-
-  .switch {
-    position: relative;
-    display: inline-block;
-    flex-shrink: 0;
-    width: 2.4rem;
-    height: 1.35rem;
-  }
-
-  .switch input {
-    position: absolute;
-    inset: 0;
-    margin: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
-
-  .switch-track {
-    position: absolute;
-    inset: 0;
-    background: #2a2f42;
-    border: 1px solid #333a52;
-    border-radius: 999px;
-    transition: background 0.15s ease, border-color 0.15s ease;
-  }
-
-  .switch-track::before {
-    content: '';
-    position: absolute;
-    top: 1px;
-    left: 1px;
-    width: 1.1rem;
-    height: 1.1rem;
-    background: #cbd5e1;
-    border-radius: 50%;
-    transition: transform 0.15s ease, background 0.15s ease;
-  }
-
-  .switch input:checked + .switch-track {
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-
-  .switch input:checked + .switch-track::before {
-    transform: translateX(1.05rem);
-    background: #fff;
-  }
-
-  .switch input:disabled + .switch-track {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .switch input:focus-visible + .switch-track {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
   }
 
   .grid {
