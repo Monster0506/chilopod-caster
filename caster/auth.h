@@ -30,4 +30,27 @@ struct rover_auth_entry *rover_auth_parse(struct caster_state *caster, const cha
 void rover_auth_free(struct rover_auth_entry *this);
 struct rover_auth_entry *rover_auth_lookup(struct rover_auth_entry *auth, const char *user);
 
+/*
+ * Entry for a /adm console account: same "stays on file when disabled" shape
+ * as rover_auth_entry, plus a role.
+ */
+struct user_auth_entry {
+	const char *user;
+	const char *password;
+	const char *role;		// "admin" or "viewer"
+	int enabled;
+};
+struct user_auth_entry *user_auth_parse(struct caster_state *caster, const char *filename);
+void user_auth_free(struct user_auth_entry *this);
+struct user_auth_entry *user_auth_lookup(struct user_auth_entry *auth, const char *user);
+
+/*
+ * Resolved access level for a /adm request: NONE means the credentials
+ * didn't check out, VIEWER can read, ADMIN can also mutate.
+ */
+enum admin_role { ADMIN_ROLE_NONE = 0, ADMIN_ROLE_VIEWER, ADMIN_ROLE_ADMIN };
+struct ntrip_state;
+enum admin_role resolve_admin_role(struct ntrip_state *this, const char *user, const char *password);
+const char *admin_role_name(enum admin_role role);
+
 #endif

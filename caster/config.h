@@ -367,6 +367,7 @@ struct config {
 	const char *host_auth_filename;
 	const char *source_auth_filename;
 	const char *rover_auth_filename;	// optional; NULL disables rover authentication
+	const char *user_auth_filename;	// optional; NULL disables extra /adm console accounts
 	const char *blocklist_filename;
 	const char *sourcetable_filename;
 	const char *sidecar_stats_filename;
@@ -413,6 +414,7 @@ struct config {
 	struct auth_entry *host_auth;
 	struct auth_entry *source_auth;
 	struct rover_auth_entry *rover_auth;
+	struct user_auth_entry *user_auth;
 
 	/* Quota/block list by IP prefix */
 	struct prefix_table *blocklist;
