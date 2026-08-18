@@ -81,6 +81,7 @@
   ];
 
   let form = $state({});
+  let savedForm = $state({});
   let error = $state('');
   let loading = $state(true);
   let savingSection = $state(null);
@@ -96,12 +97,36 @@
       const res = await apiGet('settings');
       error = '';
       form = { ...res };
+      savedForm = structuredClone(res);
     } catch (e) {
       error = e.message;
     } finally {
       loading = false;
     }
   }
+
+  // Refresh just the given top-level keys from the server after a save,
+  // instead of a full fetchSettings() that would clobber unsaved edits
+  // sitting in other, unrelated blocks.
+  async function refreshAfterSave(keys) {
+    const res = await apiGet('settings');
+    for (const k of keys) {
+      form[k] = res[k];
+      savedForm[k] = structuredClone(res[k]);
+    }
+  }
+
+  function sectionDirty(section) {
+    return section.fields.some((f) => String(form[f.name] ?? '') !== String(savedForm[f.name] ?? ''));
+  }
+
+  let dirtyBlocks = $derived.by(() => {
+    const blocks = [];
+    if (form.alarms && JSON.stringify(form.alarms) !== JSON.stringify(savedForm.alarms)) blocks.push('Alarms');
+    if (newPassword || confirmPassword) blocks.push('Admin password');
+    for (const s of SECTIONS) if (sectionDirty(s)) blocks.push(s.title);
+    return blocks;
+  });
 
   let mountpointNames = $state([]);
 
@@ -136,7 +161,7 @@
           ...sectionMsg,
           [section.key]: res.result === 0 ? 'Saved.' : 'Saved, but reload reported an issue -- showing current server value.',
         };
-        await fetchSettings();
+        await refreshAfterSave(section.fields.map((f) => f.name));
       }
     } catch (e) {
       sectionMsg = { ...sectionMsg, [section.key]: `Failed: ${e.message}` };
@@ -170,41 +195,15 @@
     r.alarm_types = next.length === ALARM_TYPES.length ? null : next;
   }
 
-  let togglingAlarmType = $state(null);
-  let alarmTypeMsg = $state('');
+  const ALARM_TYPE_DEFAULTS = {
+    station_offline: { after_minutes: 0 },
+    station_online: { after_minutes: 0 },
+    low_sv_count: { min_sats: 0, after_minutes: 0 },
+    position_drift: { lat_mm: 0, lon_mm: 0, alt_mm: 0, after_minutes: 0 },
+  };
 
-  async function enableAlarmType(key) {
-    togglingAlarmType = key;
-    alarmTypeMsg = '';
-    try {
-      const res = await apiPost('settings', { [`alarms.${key}.enable`]: '1' });
-      if (res.error) {
-        alarmTypeMsg = res.error;
-      } else {
-        await fetchSettings();
-      }
-    } catch (e) {
-      alarmTypeMsg = `Failed: ${e.message}`;
-    } finally {
-      togglingAlarmType = null;
-    }
-  }
-
-  async function disableAlarmType(key) {
-    togglingAlarmType = key;
-    alarmTypeMsg = '';
-    try {
-      const res = await apiPost('settings', { [`alarms.${key}.remove`]: '1' });
-      if (res.error) {
-        alarmTypeMsg = res.error;
-      } else {
-        await fetchSettings();
-      }
-    } catch (e) {
-      alarmTypeMsg = `Failed: ${e.message}`;
-    } finally {
-      togglingAlarmType = null;
-    }
+  function toggleAlarmType(key) {
+    form.alarms[key] = form.alarms[key] ? null : { ...ALARM_TYPE_DEFAULTS[key] };
   }
 
   async function saveAlarms() {
@@ -235,16 +234,21 @@
       payload['alarms.position_drift.alt_mm'] = String(a.position_drift.alt_mm ?? '');
       payload['alarms.position_drift.after_minutes'] = String(a.position_drift.after_minutes ?? '');
     }
-    // Only touch a recipient's name if it's actually set - an unset
-    // (optional) name has no key to overwrite in the config file yet.
-    (a.recipients ?? []).forEach((r, i) => {
-      if (r.name) payload[`alarms.recipients[${i}].name`] = r.name;
-      payload[`alarms.recipients[${i}].email`] = r.email ?? '';
-      payload[`alarms.recipients[${i}].alarm_types`] = (r.alarm_types ?? []).join(',');
-    });
-    (a.mountpoints ?? []).forEach((m, i) => {
-      payload[`alarms.mountpoints[${i}].alarm_types`] = (m.alarm_types ?? []).join(',');
-    });
+    for (const t of ALARM_TYPES) {
+      const wasEnabled = !!savedForm.alarms?.[t.key];
+      const isEnabled = !!a[t.key];
+      if (isEnabled && !wasEnabled) payload[`alarms.${t.key}.enable`] = '1';
+      else if (!isEnabled && wasEnabled) payload[`alarms.${t.key}.remove`] = '1';
+    }
+    payload['alarms.recipients.set'] = JSON.stringify((a.recipients ?? []).map((r) => ({
+      email: r.email ?? '',
+      name: r.name ?? '',
+      alarm_types: (r.alarm_types ?? []).join(','),
+    })));
+    payload['alarms.mountpoints.set'] = JSON.stringify((a.mountpoints ?? []).map((m) => ({
+      mountpoint: m.mountpoint,
+      alarm_types: (m.alarm_types ?? []).join(','),
+    })));
 
     try {
       const res = await apiPost('settings', payload);
@@ -255,7 +259,7 @@
           ...sectionMsg,
           alarms: res.result === 0 ? 'Saved.' : 'Saved, but reload reported an issue -- showing current server value.',
         };
-        await fetchSettings();
+        await refreshAfterSave(['alarms']);
       }
     } catch (e) {
       sectionMsg = { ...sectionMsg, alarms: `Failed: ${e.message}` };
@@ -266,47 +270,18 @@
 
   let newRecipientName = $state('');
   let newRecipientEmail = $state('');
-  let addingRecipient = $state(false);
-  let removingIndex = $state(null);
   let recipientMsg = $state('');
 
-  async function addRecipient() {
+  function addRecipient() {
     if (!newRecipientEmail) { recipientMsg = 'Email is required.'; return; }
-    addingRecipient = true;
     recipientMsg = '';
-    try {
-      const payload = { 'alarms.recipients.add.email': newRecipientEmail };
-      if (newRecipientName) payload['alarms.recipients.add.name'] = newRecipientName;
-      const res = await apiPost('settings', payload);
-      if (res.error) {
-        recipientMsg = res.error;
-      } else {
-        newRecipientName = '';
-        newRecipientEmail = '';
-        await fetchSettings();
-      }
-    } catch (e) {
-      recipientMsg = `Failed: ${e.message}`;
-    } finally {
-      addingRecipient = false;
-    }
+    form.alarms.recipients = [...form.alarms.recipients, { name: newRecipientName || null, email: newRecipientEmail, alarm_types: null }];
+    newRecipientName = '';
+    newRecipientEmail = '';
   }
 
-  async function removeRecipient(i) {
-    removingIndex = i;
-    recipientMsg = '';
-    try {
-      const res = await apiPost('settings', { 'alarms.recipients.remove': String(i) });
-      if (res.error) {
-        recipientMsg = res.error;
-      } else {
-        await fetchSettings();
-      }
-    } catch (e) {
-      recipientMsg = `Failed: ${e.message}`;
-    } finally {
-      removingIndex = null;
-    }
+  function removeRecipient(i) {
+    form.alarms.recipients = form.alarms.recipients.filter((_, idx) => idx !== i);
   }
 
   function mountpointFilterWants(m, key) {
@@ -320,8 +295,6 @@
 
   let newMountpointName = $state('');
   let newMountpointTypes = $state([]);
-  let addingMountpointFilter = $state(false);
-  let removingMountpointFilter = $state(null);
   let mountpointFilterMsg = $state('');
 
   function toggleNewMountpointType(key) {
@@ -330,44 +303,20 @@
       : [...newMountpointTypes, key];
   }
 
-  async function addMountpointFilter() {
+  function addMountpointFilter() {
     if (!newMountpointName) { mountpointFilterMsg = 'Mountpoint name is required.'; return; }
-    addingMountpointFilter = true;
-    mountpointFilterMsg = '';
-    try {
-      const res = await apiPost('settings', {
-        'alarms.mountpoints.add.mountpoint': newMountpointName,
-        'alarms.mountpoints.add.alarm_types': newMountpointTypes.join(','),
-      });
-      if (res.error) {
-        mountpointFilterMsg = res.error;
-      } else {
-        newMountpointName = '';
-        newMountpointTypes = [];
-        await fetchSettings();
-      }
-    } catch (e) {
-      mountpointFilterMsg = `Failed: ${e.message}`;
-    } finally {
-      addingMountpointFilter = false;
+    if (form.alarms.mountpoints.some((m) => m.mountpoint === newMountpointName)) {
+      mountpointFilterMsg = 'That mountpoint already has an alarm filter.';
+      return;
     }
+    mountpointFilterMsg = '';
+    form.alarms.mountpoints = [...form.alarms.mountpoints, { mountpoint: newMountpointName, alarm_types: [...newMountpointTypes] }];
+    newMountpointName = '';
+    newMountpointTypes = [];
   }
 
-  async function removeMountpointFilter(mountpoint) {
-    removingMountpointFilter = mountpoint;
-    mountpointFilterMsg = '';
-    try {
-      const res = await apiPost('settings', { 'alarms.mountpoints.remove': mountpoint });
-      if (res.error) {
-        mountpointFilterMsg = res.error;
-      } else {
-        await fetchSettings();
-      }
-    } catch (e) {
-      mountpointFilterMsg = `Failed: ${e.message}`;
-    } finally {
-      removingMountpointFilter = null;
-    }
+  function removeMountpointFilter(mountpoint) {
+    form.alarms.mountpoints = form.alarms.mountpoints.filter((m) => m.mountpoint !== mountpoint);
   }
 
   async function changePassword(e) {
@@ -442,20 +391,14 @@
           <div class="alarm-type-list">
             {#each ALARM_TYPES as t (t.key)}
               <label class="switch-row">
-                <span>{t.label}{#if togglingAlarmType === t.key}<span class="field-hint"> …</span>{/if}</span>
+                <span>{t.label}</span>
                 <span class="switch">
-                  <input
-                    type="checkbox"
-                    checked={!!form.alarms[t.key]}
-                    disabled={togglingAlarmType === t.key}
-                    onchange={() => (form.alarms[t.key] ? disableAlarmType(t.key) : enableAlarmType(t.key))}
-                  />
+                  <input type="checkbox" checked={!!form.alarms[t.key]} onchange={() => toggleAlarmType(t.key)} />
                   <span class="switch-track"></span>
                 </span>
               </label>
             {/each}
           </div>
-          {#if alarmTypeMsg}<div class="msg">{alarmTypeMsg}</div>{/if}
 
           <h4>Per-base alarm filters</h4>
           {#if form.alarms.mountpoints.length === 0}
@@ -465,9 +408,7 @@
               {#each form.alarms.mountpoints as m, i (i)}
                 <div class="recipient-row">
                   <span class="mountpoint-name">{m.mountpoint}</span>
-                  <button type="button" class="remove-btn" onclick={() => removeMountpointFilter(m.mountpoint)} disabled={removingMountpointFilter === m.mountpoint}>
-                    {removingMountpointFilter === m.mountpoint ? 'Removing…' : 'Remove'}
-                  </button>
+                  <button type="button" class="remove-btn" onclick={() => removeMountpointFilter(m.mountpoint)}>Remove</button>
                 </div>
                 <div class="recipient-types">
                   <span class="field-hint">Checked for:</span>
@@ -501,7 +442,7 @@
                 {t.label}
               </label>
             {/each}
-            <button type="button" onclick={addMountpointFilter} disabled={addingMountpointFilter}>{addingMountpointFilter ? 'Adding…' : '+ Add filter'}</button>
+            <button type="button" onclick={addMountpointFilter}>+ Add filter</button>
           </div>
           {#if newMountpointTypes.length === 0}
             <p class="field-hint">No types checked -- this will suppress every alarm for that mountpoint.</p>
@@ -517,9 +458,7 @@
                 <div class="recipient-row">
                   <label>Name <input type="text" bind:value={r.name} /></label>
                   <label>Email <input type="text" bind:value={r.email} /></label>
-                  <button type="button" class="remove-btn" onclick={() => removeRecipient(i)} disabled={removingIndex === i}>
-                    {removingIndex === i ? 'Removing…' : 'Remove'}
-                  </button>
+                  <button type="button" class="remove-btn" onclick={() => removeRecipient(i)}>Remove</button>
                 </div>
                 <div class="recipient-types">
                   <span class="field-hint">Receives:</span>
@@ -537,7 +476,7 @@
           <div class="recipient-row recipient-add">
             <label>New name (optional) <input type="text" bind:value={newRecipientName} /></label>
             <label>New email <input type="text" bind:value={newRecipientEmail} /></label>
-            <button type="button" onclick={addRecipient} disabled={addingRecipient}>{addingRecipient ? 'Adding…' : '+ Add recipient'}</button>
+            <button type="button" onclick={addRecipient}>+ Add recipient</button>
           </div>
           {#if recipientMsg}<div class="msg">{recipientMsg}</div>{/if}
 
@@ -622,6 +561,12 @@
   {/if}
 </div>
 
+{#if dirtyBlocks.length > 0}
+  <div class="unsaved-toast">
+    Unsaved changes: {dirtyBlocks.join(', ')}
+  </div>
+{/if}
+
 <style>
   .page {
     padding: 2rem;
@@ -667,6 +612,21 @@
     border-radius: 8px;
     padding: 1.25rem;
     margin-bottom: 1.25rem;
+  }
+
+  .unsaved-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 1.25rem;
+    transform: translateX(-50%);
+    background: #3a2a0f;
+    border: 1px solid #d97706;
+    border-radius: 8px;
+    padding: 0.6rem 1.1rem;
+    color: #fbbf24;
+    font-size: 0.85rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    z-index: 100;
   }
 
   .card h3 {

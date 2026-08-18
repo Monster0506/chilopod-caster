@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include <json-c/json_object.h>
+#include <json-c/json_tokener.h>
 
 #include "alarms.h"
 #include "conf.h"
@@ -1037,6 +1038,108 @@ static int parse_alarm_types(const char *value, const char ***out_types, int *ou
 	return 0;
 }
 
+/*
+ * Replace a recipient list wholesale from a JSON array of
+ * {"email": ..., "name": ..., "alarm_types": "a,b,c"} objects.
+ * alarm_types missing or empty means "every alarm type" (NULL).
+ */
+static int recipients_from_json(json_object *jarr, struct config_alarms_recipient **out, int *out_count, const char **errmsg) {
+	if (!json_object_is_type(jarr, json_type_array)) {
+		*errmsg = "alarms.recipients.set must be a JSON array";
+		return -1;
+	}
+	int n = json_object_array_length(jarr);
+	if (n == 0) {
+		*errmsg = "at least one recipient is required";
+		return -1;
+	}
+	struct config_alarms_recipient *recipients = (struct config_alarms_recipient *)calloc(n, sizeof(*recipients));
+	if (!recipients) { *errmsg = "out of memory"; return -1; }
+
+	int i;
+	for (i = 0; i < n; i++) {
+		json_object *jr = json_object_array_get_idx(jarr, i);
+		json_object *jemail, *jname, *jtypes;
+		const char *email = json_object_object_get_ex(jr, "email", &jemail) ? json_object_get_string(jemail) : NULL;
+		if (!email || !*email || !field_is_safe(email)) {
+			*errmsg = "invalid or empty recipient email";
+			goto fail;
+		}
+		recipients[i].email = strdup(email);
+		if (json_object_object_get_ex(jr, "name", &jname)) {
+			const char *name = json_object_get_string(jname);
+			if (name && *name) recipients[i].name = strdup(name);
+		}
+		const char *types_str = json_object_object_get_ex(jr, "alarm_types", &jtypes) ? json_object_get_string(jtypes) : NULL;
+		if (parse_alarm_types(types_str ? types_str : "", &recipients[i].alarm_types, &recipients[i].alarm_types_count) < 0) {
+			*errmsg = "unknown alarm type in a recipient's alarm_types";
+			goto fail;
+		}
+	}
+	*out = recipients;
+	*out_count = n;
+	return 0;
+fail:
+	for (int j = 0; j <= i && j < n; j++) {
+		free((char *)recipients[j].name);
+		free((char *)recipients[j].email);
+		for (int k = 0; k < recipients[j].alarm_types_count; k++)
+			free((char *)recipients[j].alarm_types[k]);
+		free(recipients[j].alarm_types);
+	}
+	free(recipients);
+	return -1;
+}
+
+/*
+ * Replace the per-mountpoint alarm filter list wholesale from a JSON array
+ * of {"mountpoint": ..., "alarm_types": "a,b,c"} objects. An empty
+ * alarm_types means every alarm type is suppressed for that mountpoint.
+ */
+static int mountpoints_from_json(json_object *jarr, struct config_alarms_mountpoint **out, int *out_count, const char **errmsg) {
+	if (!json_object_is_type(jarr, json_type_array)) {
+		*errmsg = "alarms.mountpoints.set must be a JSON array";
+		return -1;
+	}
+	int n = json_object_array_length(jarr);
+	struct config_alarms_mountpoint *mountpoints = (struct config_alarms_mountpoint *)calloc(n ? n : 1, sizeof(*mountpoints));
+	if (!mountpoints) { *errmsg = "out of memory"; return -1; }
+
+	int i;
+	for (i = 0; i < n; i++) {
+		json_object *jm = json_object_array_get_idx(jarr, i);
+		json_object *jmp, *jtypes;
+		const char *mp = json_object_object_get_ex(jm, "mountpoint", &jmp) ? json_object_get_string(jmp) : NULL;
+		if (!mp || !*mp || !field_is_safe(mp)) {
+			*errmsg = "invalid or empty mountpoint name";
+			goto fail;
+		}
+		for (int k = 0; k < i; k++)
+			if (!strcmp(mountpoints[k].mountpoint, mp)) {
+				*errmsg = "duplicate mountpoint in alarms.mountpoints.set";
+				goto fail;
+			}
+		mountpoints[i].mountpoint = strdup(mp);
+		const char *types_str = json_object_object_get_ex(jm, "alarm_types", &jtypes) ? json_object_get_string(jtypes) : NULL;
+		if (parse_alarm_types(types_str ? types_str : "", &mountpoints[i].alarm_types, &mountpoints[i].alarm_types_count) < 0) {
+			*errmsg = "unknown alarm type in a mountpoint's alarm_types";
+			goto fail;
+		}
+	}
+	*out = mountpoints;
+	*out_count = n;
+	return 0;
+fail:
+	for (int j = 0; j <= i && j < n; j++) {
+		free((char *)mountpoints[j].mountpoint);
+		for (int k = 0; k < mountpoints[j].alarm_types_count; k++)
+			free((char *)mountpoints[j].alarm_types[k]);
+		free(mountpoints[j].alarm_types);
+	}
+	free(mountpoints);
+	return -1;
+}
+
 struct mime_content *api_settings_set_json(struct caster_state *caster, struct request *req) {
 	struct config *config = req->st->config;
 	int changed = 0;
@@ -1376,187 +1479,57 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 		changed = 1; yaml_changed = 1;
 	}
 
-	char *recipients_remove = (char *)hash_table_get(req->hash, "alarms.recipients.remove");
-	if (recipients_remove) {
-		char *rend;
-		long idx = strtol(recipients_remove, &rend, 10);
-		if (rend == recipients_remove || *rend || idx < 0) {
-			config_free_edit(edit);
-			return api_error_json("alarms.recipients.remove must be a non-negative integer");
-		}
-		struct config_alarms *a = edit->alarms;
-		if (!a || idx >= a->recipients_count) {
-			config_free_edit(edit);
-			return api_error_json("that recipient index isn't present in the config file");
-		}
-		if (a->recipients_count <= 1) {
-			config_free_edit(edit);
-			return api_error_json("at least one recipient is required");
-		}
-		struct config_alarms_recipient *r = &a->recipients[idx];
-		free((char *)r->name);
-		free((char *)r->email);
-		for (int j = 0; j < r->alarm_types_count; j++)
-			free((char *)r->alarm_types[j]);
-		free(r->alarm_types);
-		memmove(r, r + 1, (a->recipients_count - idx - 1) * sizeof(*r));
-		a->recipients_count--;
-		changed = 1; yaml_changed = 1;
-	}
-
-	char *recipients_add_email = (char *)hash_table_get(req->hash, "alarms.recipients.add.email");
-	if (recipients_add_email) {
-		char *recipients_add_name = (char *)hash_table_get(req->hash, "alarms.recipients.add.name");
-		if (!*recipients_add_email || !field_is_safe(recipients_add_email)) {
-			config_free_edit(edit);
-			return api_error_json("invalid or empty value for a setting");
-		}
-		if (recipients_add_name && !field_is_safe(recipients_add_name)) {
-			config_free_edit(edit);
-			return api_error_json("invalid characters in a setting");
-		}
-		struct config_alarms *a = ensure_alarms(edit);
-		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
-		struct config_alarms_recipient *nr = (struct config_alarms_recipient *)realloc(
-			a->recipients, (a->recipients_count + 1) * sizeof(*a->recipients));
-		if (!nr) { config_free_edit(edit); return api_error_json("out of memory"); }
-		a->recipients = nr;
-		struct config_alarms_recipient *r = &a->recipients[a->recipients_count];
-		r->name = (recipients_add_name && *recipients_add_name) ? strdup(recipients_add_name) : NULL;
-		r->email = strdup(recipients_add_email);
-		r->alarm_types = NULL;
-		r->alarm_types_count = 0;
-		a->recipients_count++;
-		changed = 1; yaml_changed = 1;
-	}
-
-	for (int idx = 0; idx < 20; idx++) {
-		char key[64];
-		struct config_alarms *a = edit->alarms;
-
-		snprintf(key, sizeof key, "alarms.recipients[%d].name", idx);
-		char *value = (char *)hash_table_get(req->hash, key);
-		if (value) {
-			if (!field_is_safe(value)) { config_free_edit(edit); return api_error_json("invalid characters in a setting"); }
-			if (!a || idx >= a->recipients_count) { config_free_edit(edit); return api_error_json("that recipient index isn't present in the config file"); }
-			free((char *)a->recipients[idx].name);
-			a->recipients[idx].name = *value ? strdup(value) : NULL;
-			changed = 1; yaml_changed = 1;
-		}
-
-		snprintf(key, sizeof key, "alarms.recipients[%d].email", idx);
-		value = (char *)hash_table_get(req->hash, key);
-		if (value) {
-			if (!*value || !field_is_safe(value)) { config_free_edit(edit); return api_error_json("invalid or empty value for a setting"); }
-			if (!a || idx >= a->recipients_count) { config_free_edit(edit); return api_error_json("that recipient index isn't present in the config file"); }
-			free((char *)a->recipients[idx].email);
-			a->recipients[idx].email = strdup(value);
-			changed = 1; yaml_changed = 1;
-		}
-
-		snprintf(key, sizeof key, "alarms.recipients[%d].alarm_types", idx);
-		value = (char *)hash_table_get(req->hash, key);
-		if (value) {
-			if (!a || idx >= a->recipients_count) { config_free_edit(edit); return api_error_json("that recipient index isn't present in the config file"); }
-			struct config_alarms_recipient *r = &a->recipients[idx];
-			const char **types;
-			int count;
-			if (parse_alarm_types(value, &types, &count) < 0) {
-				config_free_edit(edit);
-				return api_error_json("unknown alarm type in alarms.recipients[N].alarm_types");
-			}
-			for (int j = 0; j < r->alarm_types_count; j++)
-				free((char *)r->alarm_types[j]);
-			free(r->alarm_types);
-			r->alarm_types = types;
-			r->alarm_types_count = count;
-			changed = 1; yaml_changed = 1;
-		}
-	}
-
-	char *mountpoints_remove = (char *)hash_table_get(req->hash, "alarms.mountpoints.remove");
-	if (mountpoints_remove) {
-		if (!field_is_safe(mountpoints_remove)) { config_free_edit(edit); return api_error_json("invalid characters in alarms.mountpoints.remove"); }
-		struct config_alarms *a = edit->alarms;
-		int found = -1;
-		for (int i = 0; a && i < a->mountpoints_count; i++)
-			if (!strcmp(a->mountpoints[i].mountpoint, mountpoints_remove)) { found = i; break; }
-		if (found < 0) {
-			config_free_edit(edit);
-			return api_error_json("that mountpoint has no alarm filter to remove");
-		}
-		struct config_alarms_mountpoint *m = &a->mountpoints[found];
-		free((char *)m->mountpoint);
-		for (int j = 0; j < m->alarm_types_count; j++)
-			free((char *)m->alarm_types[j]);
-		free(m->alarm_types);
-		memmove(m, m + 1, (a->mountpoints_count - found - 1) * sizeof(*m));
-		a->mountpoints_count--;
-		changed = 1; yaml_changed = 1;
-	}
-
-	char *mountpoints_add_mp = (char *)hash_table_get(req->hash, "alarms.mountpoints.add.mountpoint");
-	if (mountpoints_add_mp) {
-		char *mountpoints_add_types = (char *)hash_table_get(req->hash, "alarms.mountpoints.add.alarm_types");
-		if (!*mountpoints_add_mp || !field_is_safe(mountpoints_add_mp)) {
-			config_free_edit(edit);
-			return api_error_json("invalid or empty alarms.mountpoints.add.mountpoint");
-		}
-		if (!mountpoints_add_types) {
-			config_free_edit(edit);
-			return api_error_json("alarms.mountpoints.add.alarm_types is required");
-		}
-		struct config_alarms *a = ensure_alarms(edit);
-		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
-		for (int i = 0; i < a->mountpoints_count; i++)
-			if (!strcmp(a->mountpoints[i].mountpoint, mountpoints_add_mp)) {
-				config_free_edit(edit);
-				return api_error_json("that mountpoint already has an alarm filter");
-			}
-		const char **types;
+	v = (char *)hash_table_get(req->hash, "alarms.recipients.set");
+	if (v) {
+		json_object *jarr = json_tokener_parse(v);
+		if (!jarr) { config_free_edit(edit); return api_error_json("alarms.recipients.set is not valid JSON"); }
+		struct config_alarms_recipient *recipients;
 		int count;
-		if (parse_alarm_types(mountpoints_add_types, &types, &count) < 0) {
+		if (recipients_from_json(jarr, &recipients, &count, &errmsg) < 0) {
+			json_object_put(jarr);
 			config_free_edit(edit);
-			return api_error_json("unknown alarm type in alarms.mountpoints.add.alarm_types");
+			return api_error_json(errmsg);
 		}
-		struct config_alarms_mountpoint *nm = (struct config_alarms_mountpoint *)realloc(
-			a->mountpoints, (a->mountpoints_count + 1) * sizeof(*a->mountpoints));
-		if (!nm) {
-			for (int j = 0; j < count; j++)
-				free((char *)types[j]);
-			free((void *)types);
-			config_free_edit(edit);
-			return api_error_json("out of memory");
+		json_object_put(jarr);
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		for (int i = 0; i < a->recipients_count; i++) {
+			free((char *)a->recipients[i].name);
+			free((char *)a->recipients[i].email);
+			for (int j = 0; j < a->recipients[i].alarm_types_count; j++)
+				free((char *)a->recipients[i].alarm_types[j]);
+			free(a->recipients[i].alarm_types);
 		}
-		a->mountpoints = nm;
-		a->mountpoints[a->mountpoints_count].mountpoint = strdup(mountpoints_add_mp);
-		a->mountpoints[a->mountpoints_count].alarm_types = types;
-		a->mountpoints[a->mountpoints_count].alarm_types_count = count;
-		a->mountpoints_count++;
+		free(a->recipients);
+		a->recipients = recipients;
+		a->recipients_count = count;
 		changed = 1; yaml_changed = 1;
 	}
 
-	for (int idx = 0; idx < 20; idx++) {
-		char key[64];
-		snprintf(key, sizeof key, "alarms.mountpoints[%d].alarm_types", idx);
-		char *value = (char *)hash_table_get(req->hash, key);
-		if (value) {
-			struct config_alarms *a = edit->alarms;
-			if (!a || idx >= a->mountpoints_count) { config_free_edit(edit); return api_error_json("that mountpoint filter index isn't present in the config file"); }
-			struct config_alarms_mountpoint *m = &a->mountpoints[idx];
-			const char **types;
-			int count;
-			if (parse_alarm_types(value, &types, &count) < 0) {
-				config_free_edit(edit);
-				return api_error_json("unknown alarm type in alarms.mountpoints[N].alarm_types");
-			}
-			for (int j = 0; j < m->alarm_types_count; j++)
-				free((char *)m->alarm_types[j]);
-			free(m->alarm_types);
-			m->alarm_types = types;
-			m->alarm_types_count = count;
-			changed = 1; yaml_changed = 1;
+	v = (char *)hash_table_get(req->hash, "alarms.mountpoints.set");
+	if (v) {
+		json_object *jarr = json_tokener_parse(v);
+		if (!jarr) { config_free_edit(edit); return api_error_json("alarms.mountpoints.set is not valid JSON"); }
+		struct config_alarms_mountpoint *mountpoints;
+		int count;
+		if (mountpoints_from_json(jarr, &mountpoints, &count, &errmsg) < 0) {
+			json_object_put(jarr);
+			config_free_edit(edit);
+			return api_error_json(errmsg);
 		}
+		json_object_put(jarr);
+		struct config_alarms *a = ensure_alarms(edit);
+		if (!a) { config_free_edit(edit); return api_error_json("out of memory"); }
+		for (int i = 0; i < a->mountpoints_count; i++) {
+			free((char *)a->mountpoints[i].mountpoint);
+			for (int j = 0; j < a->mountpoints[i].alarm_types_count; j++)
+				free((char *)a->mountpoints[i].alarm_types[j]);
+			free(a->mountpoints[i].alarm_types);
+		}
+		free(a->mountpoints);
+		a->mountpoints = mountpoints;
+		a->mountpoints_count = count;
+		changed = 1; yaml_changed = 1;
 	}
 
 	if (!changed) {
