@@ -514,7 +514,9 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 		if (state->was_live == 0) {
 			if (state->online_since.tv_sec == 0)
 				state->online_since = *now;
-			int online_enabled = alarms->station_online && mountpoint_wants(alarms, mountpoint, ALARM_STATION_ONLINE);
+			int outage_was_notable = !alarms->station_offline || state->offline_crossed_threshold;
+			int online_enabled = alarms->station_online && mountpoint_wants(alarms, mountpoint, ALARM_STATION_ONLINE)
+				&& outage_was_notable;
 			double minutes_up = online_enabled ? timeval_diff_minutes(now, &state->online_since) : 0;
 			if (!online_enabled || minutes_up >= alarms->station_online->after_minutes) {
 				if (online_enabled && alarm_rate_ok(state, ALARM_STATION_ONLINE, now, alarms->min_interval_minutes)) {
@@ -533,16 +535,20 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 	} else {
 		state->online_since.tv_sec = 0;
 		state->was_live = 0;
-		if (state->offline_since.tv_sec == 0)
+		if (state->offline_since.tv_sec == 0) {
 			state->offline_since = *now;
+			state->offline_crossed_threshold = 0;
+		}
 		if (alarms->station_offline && mountpoint_wants(alarms, mountpoint, ALARM_STATION_OFFLINE)) {
 			double minutes_down = timeval_diff_minutes(now, &state->offline_since);
-			if (minutes_down >= alarms->station_offline->after_minutes
-					&& alarm_rate_ok(state, ALARM_STATION_OFFLINE, now, alarms->min_interval_minutes)) {
-				char body[256];
-				snprintf(body, sizeof body, "Station %s has been offline for %.0f minutes.", mountpoint, minutes_down);
-				if (fire_alarm(caster, alarms, mountpoint, ALARM_STATION_OFFLINE, "offline", body))
-					state->last_sent[ALARM_STATION_OFFLINE] = *now;
+			if (minutes_down >= alarms->station_offline->after_minutes) {
+				state->offline_crossed_threshold = 1;
+				if (alarm_rate_ok(state, ALARM_STATION_OFFLINE, now, alarms->min_interval_minutes)) {
+					char body[256];
+					snprintf(body, sizeof body, "Station %s has been offline for %.0f minutes.", mountpoint, minutes_down);
+					if (fire_alarm(caster, alarms, mountpoint, ALARM_STATION_OFFLINE, "offline", body))
+						state->last_sent[ALARM_STATION_OFFLINE] = *now;
+				}
 			}
 		}
 	}

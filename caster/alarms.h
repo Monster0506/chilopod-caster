@@ -31,6 +31,7 @@ enum alarm_event_type {
 struct alarm_mountpoint_state {
 	int was_live;			// -1 unknown (first check), 0 offline, 1 online
 	struct timeval offline_since;
+	int offline_crossed_threshold;	// this outage reached station_offline->after_minutes
 	struct timeval online_since;	// zero while offline; set when the source first comes back
 	struct timeval low_sv_since;	// zero if not currently under threshold
 	struct timeval drift_since;	// zero if not currently over threshold
