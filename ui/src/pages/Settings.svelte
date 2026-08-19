@@ -109,9 +109,8 @@
     }
   }
 
-  // Refresh just the given top-level keys from the server after a save,
-  // instead of a full fetchSettings() that would clobber unsaved edits
-  // sitting in other, unrelated blocks.
+  // Refresh only the given keys after a save, instead of a full
+  // fetchSettings() that would clobber unsaved edits in other blocks.
   async function refreshAfterSave(keys) {
     const res = await apiGet('settings');
     for (const k of keys) {
@@ -153,7 +152,7 @@
         .filter(([, mnt]) => !mnt.virtual)
         .map(([name]) => name);
     } catch (e) {
-      // Non-critical -- the filter form still works without autocomplete.
+      // Non-critical; the filter form still works without autocomplete.
     }
   }
 
@@ -164,13 +163,11 @@
     try {
       const res = await apiPost('settings', payload);
       if (res.error) {
-        // Validation failure -- nothing was written, no need to resync.
+        // Validation failure; nothing was written, no need to resync.
         pushToast(res.error, 'error');
       } else {
-        // The value is written to disk before reload runs, so it's already
-        // live even if reload itself (res.result !== 0) had trouble with an
-        // unrelated step (e.g. reopening log files). Always resync to show
-        // the server's actual current value rather than assuming failure.
+        // Value is on disk before reload runs, so it's live even if reload
+        // itself had trouble (e.g. reopening log files). Always resync.
         pushToast(res.result === 0 ? `${section.title} saved.` : 'Saved, but reload reported an issue -- showing current server value.');
         await refreshAfterSave(section.fields.map((f) => f.name));
       }

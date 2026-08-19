@@ -160,11 +160,8 @@
       baseMarkers[b.key] = marker;
       bounds.push([b.lat, b.lon]);
 
-      // NEAR searches for a candidate base within this radius -- this is
-      // often huge (the config default is 1000km), so a filled circle would
-      // just wash the whole viewport one color whenever you're zoomed in
-      // past its edge. Border only, so it's informative when zoomed out far
-      // enough to see the boundary and invisible (correctly) otherwise.
+      // NEAR search radius, often huge (config default 1000km), so a filled
+      // circle would wash out the viewport. Border only stays informative.
       if (b.live && lookupRadiusM) {
         L.circle([b.lat, b.lon], {
           radius: lookupRadiusM,
@@ -244,9 +241,8 @@
 
     baseLayer = L.layerGroup().addTo(map);
     roverLayer = L.layerGroup().addTo(map);
-    // Off by default -- the circle radius is often huge (see
-    // max_nearest_lookup_distance_m), so it's opt-in via the layer control
-    // rather than shown automatically.
+    // Off by default: radius (max_nearest_lookup_distance_m) is often huge,
+    // so it's opt-in via the layer control.
     coverageLayer = L.layerGroup();
     baselineLayer = L.layerGroup().addTo(map);
 

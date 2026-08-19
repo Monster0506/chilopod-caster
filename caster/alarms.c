@@ -26,14 +26,8 @@
 #include "util.h"
 
 /*
- * Alarm detection and notification (issue #27).
- *
- * A periodic timer scans local, non-virtual mountpoints for four
- * conditions (station offline, station back online, low satellite count,
- * position drift) and, when a configured threshold is crossed, spawns the
- * "ruckus" helper binary as a one-shot subprocess to send an email. The
- * spawn is asynchronous (SIGCHLD + a stderr pipe watched by libevent) so a
- * slow or retrying send never blocks the caster's own event loop.
+ * Alarm detection and notification (issue #27): a periodic timer scans
+ * mountpoints and spawns the "ruckus" helper asynchronously to send email.
  */
 
 #define ALARM_CHECK_INTERVAL_S	30
@@ -462,9 +456,8 @@ static void spawn_ruckus(struct caster_state *caster, const char *ruckus_path,
 	logfmt(&caster->flog, LOG_INFO, "alarm: spawned ruckus pid %d for %s %s", pid, alarm_event_names[type], mountpoint);
 }
 
-/* Returns 1 if the outcome is already final and safe to rate-limit on, 0 if
- * a send is now in flight and the rate limit must wait for its confirmed
- * outcome (see alarms_sigchld_cb). */
+/* Returns 1 if the outcome is final and safe to rate-limit on, 0 if a send
+ * is in flight and must wait for confirmation (see alarms_sigchld_cb). */
 static int fire_alarm(struct caster_state *caster, struct config_alarms *alarms,
 		const char *mountpoint, enum alarm_event_type type, const char *summary, const char *body) {
 	char subject[256];

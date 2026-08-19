@@ -60,8 +60,7 @@ static json_object *api_ntrip_json(struct ntrip_state *st) {
 
 		/*
 		 * For a client on a virtual (NEAR) mountpoint, the physical base
-		 * it's actually receiving data from right now -- set once NEAR
-		 * has resolved a base, updated on each subsequent switch.
+		 * it's receiving from now; set once NEAR resolves a base.
 		 */
 		if (st->virtual_mountpoint) {
 			json_object_object_add_ex(new_obj, "assigned_base", json_object_new_string(st->virtual_mountpoint), JSON_C_CONSTANT_NEW);
@@ -323,9 +322,8 @@ static struct mime_content *api_error_json(const char *msg) {
 }
 
 /*
- * Add a new mountpoint: append an entry to source_auth_file and a STR line to
- * sourcetable_file, then reload -- the form-based equivalent of the manual
- * "edit source.auth + sourcetable.dat, then POST /api/v1/reload" workflow.
+ * Add a new mountpoint: append to source_auth_file and sourcetable_file,
+ * then reload; the form-based equivalent of editing both files by hand.
  */
 struct mime_content *api_add_source_json(struct caster_state *caster, struct request *req) {
 	struct config *config = req->st->config;
@@ -409,8 +407,7 @@ struct mime_content *api_add_source_json(struct caster_state *caster, struct req
 }
 
 /*
- * Rewrite a file, dropping lines whose delimited field at field_index equals
- * value exactly (field 0 is whatever precedes the first separator).
+ * Rewrite a file, dropping lines whose field at field_index equals value.
  * Returns the number of lines dropped, or -1 on I/O error.
  */
 static int remove_matching_lines(const char *dir, const char *filename, char sep, int field_index, const char *value) {
@@ -476,9 +473,8 @@ static int remove_matching_lines(const char *dir, const char *filename, char sep
 }
 
 /*
- * Rewrite one sep-delimited field (by index) of the line whose field 0
- * equals key, in a colon-file like rover.auth. Returns 1 if updated, 0 if
- * no line matched key, -1 on I/O error.
+ * Rewrite one field (by index) of the line whose field 0 equals key, in a
+ * colon-file like rover.auth. Returns 1 if updated, 0 if no match, -1 on I/O error.
  */
 static int set_colon_file_field(const char *dir, const char *filename, char sep, const char *key, int target_field, const char *new_value) {
 	char *path = joinpath(dir, filename);
@@ -850,7 +846,7 @@ struct mime_content *api_settings_get_json(struct caster_state *caster, struct r
 	}
 
 	/*
-	 * Rover (NTRIP GET client) accounts. Passwords are write-only -- never
+	 * Rover (NTRIP GET client) accounts. Passwords are write-only, never
 	 * echoed back, same policy as the SMTP credential and admin password.
 	 */
 	json_object *jrover = json_object_new_object();
@@ -873,7 +869,7 @@ struct mime_content *api_settings_get_json(struct caster_state *caster, struct r
 
 	/*
 	 * /adm console accounts (beyond the single admin_user bootstrap account).
-	 * Passwords are write-only -- never echoed back, same policy as above.
+	 * Passwords are write-only, never echoed back, same policy as above.
 	 */
 	json_object *juser = json_object_new_object();
 	json_object_object_add_ex(juser, "configured", json_object_new_boolean(config->user_auth_filename != NULL), JSON_C_CONSTANT_NEW);
@@ -1030,9 +1026,8 @@ static struct config_alarms_smtp *ensure_smtp(struct config_alarms *alarms) {
 }
 
 /*
- * Parse a comma-separated list of alarm type names into a freshly
- * allocated array of strdup'd strings. Returns -1 (leaving *out_types/
- * *out_count untouched) if any token isn't a recognized type name.
+ * Parse a comma-separated list of alarm type names into a strdup'd array.
+ * Returns -1, leaving out params untouched, if any token is unrecognized.
  */
 static int parse_alarm_types(const char *value, const char ***out_types, int *out_count) {
 	char *copy = mystrdup(value);
@@ -1066,8 +1061,7 @@ static int parse_alarm_types(const char *value, const char ***out_types, int *ou
 
 /*
  * Replace a recipient list wholesale from a JSON array of
- * {"email": ..., "name": ..., "alarm_types": "a,b,c"} objects.
- * alarm_types missing or empty means "every alarm type" (NULL).
+ * {"email", "name", "alarm_types"} objects; empty alarm_types means all.
  */
 static int recipients_from_json(json_object *jarr, struct config_alarms_recipient **out, int *out_count, const char **errmsg) {
 	if (!json_object_is_type(jarr, json_type_array)) {
@@ -1118,9 +1112,8 @@ fail:
 }
 
 /*
- * Replace the per-mountpoint alarm filter list wholesale from a JSON array
- * of {"mountpoint": ..., "alarm_types": "a,b,c"} objects. An empty
- * alarm_types means every alarm type is suppressed for that mountpoint.
+ * Replace the per-mountpoint alarm filter list from a JSON array of
+ * {"mountpoint", "alarm_types"} objects; empty alarm_types suppresses all.
  */
 static int mountpoints_from_json(json_object *jarr, struct config_alarms_mountpoint **out, int *out_count, const char **errmsg) {
 	if (!json_object_is_type(jarr, json_type_array)) {
@@ -1171,9 +1164,8 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 	int changed = 0;
 	const char *errmsg = NULL;
 
-	/* rover_auth.* fields operate on the separate rover_auth_filename text
-	 * file, not on caster.yaml -- entirely independent of the struct-edit
-	 * mechanism below, so this stays on the live config exactly as before. */
+	/* rover_auth.* fields operate on the separate rover_auth_filename file,
+	 * not caster.yaml; stays on the live config, independent of the struct-edit below. */
 	if (config->rover_auth_filename) {
 		char *ra_add_user = (char *)hash_table_get(req->hash, "rover_auth.add.user");
 		if (ra_add_user) {
@@ -1306,9 +1298,8 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 	}
 
 	/*
-	 * alarms.smtp_auth.* fields operate on the separate smtp.auth_file
-	 * text file (same host:user:password shape as source_auth/host_auth),
-	 * not on caster.yaml -- independent of the struct-edit mechanism below.
+	 * alarms.smtp_auth.* fields operate on the separate smtp.auth_file,
+	 * not caster.yaml; independent of the struct-edit mechanism below.
 	 */
 	if (config->alarms && config->alarms->smtp && config->alarms->smtp->auth_file) {
 		const char *smtp_auth_file = config->alarms->smtp->auth_file;
@@ -1346,9 +1337,8 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 	}
 
 	/*
-	 * Everything from here on mutates a scratch copy of the struct loaded
-	 * straight from caster.yaml, then saves the whole thing back out via
-	 * cyaml -- no more hand-rolled per-shape text editing.
+	 * Everything below mutates a scratch copy of the struct loaded from
+	 * caster.yaml and saves it back via cyaml, not hand-rolled text editing.
 	 */
 	struct config *edit = config_load_for_edit(caster->config_file);
 	if (!edit)
@@ -1650,9 +1640,8 @@ struct mime_content *api_settings_set_json(struct caster_state *caster, struct r
 }
 
 /*
- * Rewrite the sourcetable line for mountpoint (matched on field 1), replacing
- * field target_field with new_value. Returns 1 if a line was updated, 0 if
- * no matching line was found, -1 on I/O error.
+ * Rewrite the sourcetable line for mountpoint (matched on field 1),
+ * replacing target_field. Returns 1 if updated, 0 if no match, -1 on I/O error.
  */
 static int update_sourcetable_field(const char *dir, const char *filename, const char *mountpoint, int target_field, const char *new_value) {
 	char *path = joinpath(dir, filename);
@@ -1739,11 +1728,8 @@ static int update_sourcetable_field(const char *dir, const char *filename, const
 }
 
 /*
- * Look up what RTCM3 message types the caster has actually decoded for a
- * mountpoint and update its sourcetable format-details, nav-system, and
- * position fields to match -- the automated form of README's "go back and
- * fix the placeholder STR line" step, for sources where the real message
- * set can't be known in advance.
+ * Update a mountpoint's sourcetable format-details, nav-system, and position
+ * fields from the RTCM3 message types actually decoded for it.
  */
 struct mime_content *api_detect_source_json(struct caster_state *caster, struct request *req) {
 	struct config *config = req->st->config;

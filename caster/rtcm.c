@@ -788,13 +788,11 @@ int rtcm_info_get_pos(struct rtcm_info *this, pos_t *pos) {
 	return 1;
 }
 
-/* Meters per degree of latitude, WGS84 -- effectively constant with latitude */
+/* Meters per degree of latitude, WGS84; effectively constant with latitude */
 #define METERS_PER_DEG_LAT	111320.0
 
 /*
- * Update the running position-drift average from the position
- * just decoded from a 1005/1006 message.
- *
+ * Update the running position-drift average from a decoded 1005/1006 position.
  * Required lock: caster->rtcm_lock.
  */
 void rtcm_info_update_drift(struct rtcm_info *this, pos_t *declared_pos) {
@@ -835,9 +833,8 @@ static int rtcm_typeset_check_range(struct rtcm_typeset *this, int lo, int hi) {
 }
 
 /*
- * Derive a "GPS+GLO+..." nav-system string from which constellation-specific
- * message types (legacy, ephemeris, or MSM) have actually been observed.
- * Returns NULL if nothing constellation-identifying has been seen yet.
+ * Derive a "GPS+GLO+..." nav-system string from observed constellation
+ * message types. Returns NULL if nothing has been seen yet.
  */
 char *rtcm_info_get_nav_system(struct rtcm_info *this) {
 	struct rtcm_typeset *ts = &this->typeset;

@@ -768,10 +768,8 @@ struct config *config_parse(const char *filename, long long config_gen) {
 }
 
 /*
- * Load a fresh, raw struct from the config file for the Settings API to
- * mutate and save back -- no DEFAULT_ASSIGN, no REFCNT_INIT, none of the
- * runtime fields (host_auth, dyn, ...) populated. Never install this as
- * the live config; it exists only for load-mutate-save-free.
+ * Load a raw struct from the config file for the Settings API to mutate and
+ * save back; no defaults or runtime fields populated. Never install as the live config.
  */
 struct config *config_load_for_edit(const char *filename) {
 	struct config *edit;
@@ -787,11 +785,8 @@ int config_save_for_edit(const char *filename, struct config *edit) {
 }
 
 /*
- * Unlike config_free(), safe to use here: this struct only ever went
- * through cyaml_load_file(), so freeing exactly the schema-declared fields
- * cyaml itself allocated (via the same default allocator config_free()
- * relies on for its own free() calls) is exactly what's needed -- none of
- * the runtime fields config_free() also has to handle were ever touched.
+ * Safe here unlike config_free(): this struct only went through
+ * cyaml_load_file(), so freeing just the schema-declared fields is correct.
  */
 void config_free_edit(struct config *edit) {
 	if (edit)

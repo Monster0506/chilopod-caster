@@ -9,14 +9,8 @@
 #include "log.h"
 
 /*
- * Two fixed-size in-memory ring buffers of recent log entries, mirroring
- * what gets written to the main log file, so the admin UI can serve a live
- * log view without reading the log file off disk.
- *
- * Entries at LOG_WARNING or more severe are also kept in a separate,
- * smaller ring, so a flood of low-severity (INFO/DEBUG/EDEBUG) traffic
- * can't evict them out of the general ring before the UI gets a chance to
- * show them.
+ * Two fixed-size ring buffers of recent log entries, mirroring the main log
+ * file, so the admin UI can serve a live log view without reading it off disk.
  */
 
 #define LOGBUF_CAPACITY 500

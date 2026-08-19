@@ -10,9 +10,8 @@
 #include "util.h"
 
 /*
- * Add a "latency_ms" field to each mountpoint's stats object, computed from
- * its "last_updated" timestamp at read time (not when the sidecar wrote the
- * file), so it reflects how stale the data actually is right now.
+ * Add a "latency_ms" field to each mountpoint's stats, computed from its
+ * "last_updated" timestamp at read time, so it reflects current staleness.
  */
 static void sidecar_add_latency(json_object *mountpoints) {
 	if (!mountpoints)

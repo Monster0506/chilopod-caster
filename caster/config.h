@@ -182,10 +182,8 @@ struct config_alarms_low_sv {
 };
 
 /*
- * Position drift thresholds. lat_mm/lon_mm compare against the
- * sourcetable's declared position; alt_mm has no declared counterpart in the
- * NTRIP STR format, so it self-baselines against the first observed
- * altitude instead
+ * Position drift thresholds. lat_mm/lon_mm compare against the sourcetable's
+ * declared position; alt_mm has no STR counterpart, so it self-baselines.
  */
 struct config_alarms_position_drift {
 	int lat_mm;
@@ -195,11 +193,8 @@ struct config_alarms_position_drift {
 };
 
 /*
- * Restricts which alarm types are evaluated at all for one mountpoint.
- * A mountpoint absent from config_alarms.mountpoints[] gets every alarm
- * type (the default, unfiltered). A mountpoint present with an empty
- * alarm_types gets none -- this is how a single mountpoint is silenced
- * without affecting any other mountpoint.
+ * Restricts which alarm types are evaluated for one mountpoint. Absent from
+ * mountpoints[] means every type (default); present with empty alarm_types silences it.
  */
 struct config_alarms_mountpoint {
 	const char *mountpoint;
@@ -436,12 +431,8 @@ struct config *config_parse(const char *filename, long long config_gen);
 void config_free(struct config *this);
 
 /*
- * Scratch config editing for the Settings API: load the raw file (no
- * defaults applied, no runtime fields like host_auth/dyn populated -- it's
- * never installed as the live config), mutate specific fields directly,
- * then save the whole struct back out via the same cyaml schema that loads
- * it. Free with config_free_edit(), never config_free() -- the runtime
- * fields config_free() touches were never initialized here.
+ * Scratch config editing for the Settings API: load the raw file, mutate,
+ * save via cyaml; never install as live config. Free with config_free_edit().
  */
 struct config *config_load_for_edit(const char *filename);
 int config_save_for_edit(const char *filename, struct config *edit);

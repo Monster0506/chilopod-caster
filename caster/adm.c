@@ -148,11 +148,8 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 
 		if (!st->content_type || !strcmp(st->content_type, "application/x-www-form-urlencoded")) {
 			/*
-			 * A urlencoded body may legitimately be empty when authenticating
-			 * via the Authorization header with no other params (e.g. POST
-			 * /reload with no arguments) -- hash_from_urlencoding(NULL) is
-			 * safe and returns an empty hash. A missing Content-Type header
-			 * is treated the same way, for the same bare-POST case.
+			 * A urlencoded body may be empty for a bare POST (e.g. auth via
+			 * header only, or a missing Content-Type); NULL is handled fine.
 			 */
 			req->hash = hash_from_urlencoding(st->content);
 			if (!req->hash) {
@@ -255,7 +252,7 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 			return -1;
 		}
 
-		/* Every POST route mutates something -- viewers get read-only access */
+		/* Every POST route mutates something; viewers get read-only access */
 		if (!strcmp(method, "POST") && st->admin_role != ADMIN_ROLE_ADMIN) {
 			request_free(req);
 			*err = 403;
@@ -283,7 +280,7 @@ int admsrv(struct ntrip_state *st, const char *method, const char *root_uri, con
 		return -1;
 	}
 
-	/* Legacy access -- read-only routes, any authenticated role is fine */
+	/* Legacy access; read-only routes, any authenticated role is fine */
 
 	st->admin_role = st->user ? resolve_admin_role(st, st->user, st->password) : ADMIN_ROLE_NONE;
 	if (st->admin_role == ADMIN_ROLE_NONE) {

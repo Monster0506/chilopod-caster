@@ -70,9 +70,8 @@ struct auth_entry *auth_lookupi(struct auth_entry *auth, const char *key) {
 }
 
 /*
- * Read the rover (NTRIP GET client) account file: "user:password:Y" or
- * "user:password:N" lines, third field case-insensitive, any value other
- * than Y/1/yes/true treated as disabled.
+ * Read the rover (NTRIP GET client) account file: "user:password:Y/N"
+ * lines, third field case-insensitive, anything but Y/1/yes/true disables it.
  */
 struct rover_auth_entry *rover_auth_parse(struct caster_state *caster, const char *filename) {
 	struct parsed_file *p;
@@ -182,9 +181,8 @@ struct user_auth_entry *user_auth_lookup(struct user_auth_entry *auth, const cha
 }
 
 /*
- * The single admin_user/source_auth_file account is checked first and is
- * always full admin -- this can never be locked out by user_auth_file. Only
- * on that failing do we consult the optional, growable user_auth_file list.
+ * admin_user/source_auth_file is checked first and is always full admin,
+ * so it can't be locked out by user_auth_file, which is consulted only after.
  */
 enum admin_role resolve_admin_role(struct ntrip_state *this, const char *user, const char *password) {
 	if (user && password && check_password(this, this->config->admin_user, user, password) != CHECKPW_MOUNTPOINT_INVALID)

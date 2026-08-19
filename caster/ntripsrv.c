@@ -224,9 +224,7 @@ int check_password(struct ntrip_state *this, const char *mountpoint, const char 
 
 /*
  * Check a GET (rover) client's credentials against the rover auth list.
- * Returns 1 if user/passwd match an enabled entry, 0 otherwise. Callers
- * check config->rover_auth_filename separately to know whether rover
- * authentication is enabled at all.
+ * Returns 1 if user/passwd match an enabled entry, 0 otherwise.
  */
 static int check_rover_password(struct ntrip_state *this, const char *user, const char *passwd) {
 	struct rover_auth_entry *auth = this->config->rover_auth;

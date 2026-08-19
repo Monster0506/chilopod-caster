@@ -18,8 +18,7 @@ struct auth_entry *auth_lookupi(struct auth_entry *auth, const char *key);
 
 /*
  * Entry for a rover (NTRIP GET client) account: unlike auth_entry, a
- * disabled entry stays on file so it can be re-enabled without retyping
- * the password.
+ * disabled entry stays on file so it can be re-enabled without retyping.
  */
 struct rover_auth_entry {
 	const char *user;

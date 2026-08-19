@@ -6,18 +6,8 @@
 struct config;
 
 /*
- * Read and parse the rtcm-go sidecar's stats file (cmd/sidecar in the
- * rtcm-go repo), returning the parsed document as-is: a "mountpoints"
- * object keyed by mountpoint, and a "type_names" object mapping RTCM
- * message type numbers (as strings) to human-readable names.
- *
- * Returns NULL if no sidecar_stats_file is configured, the file doesn't
- * exist yet (the sidecar may simply not be running), or it fails to
- * parse -- all treated as "no sidecar data available" rather than an
- * error, since the sidecar is an optional, independently-run process.
- *
- * The caller owns the returned reference and must release it with
- * json_object_put().
+ * Read and parse the rtcm-go sidecar's stats file (cmd/sidecar in rtcm-go).
+ * Returns NULL if unconfigured, missing, or unparseable; caller must json_object_put() it.
  */
 json_object *sidecar_stats_json(const char *config_dir, struct config *config);
 

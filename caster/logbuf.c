@@ -89,10 +89,8 @@ json_object *logbuf_json_since(struct logbuf *this, long long since) {
 		start = since + 1;
 
 	/*
-	 * Entries older than "start" have already fallen out of the general
-	 * ring -- recover any of them still held in the priority ring, which
-	 * only holds LOG_WARNING-or-worse entries and so isn't diluted by
-	 * low-severity traffic.
+	 * Entries older than "start" already fell out of the general ring;
+	 * recover any still held in the priority ring (LOG_WARNING or worse).
 	 */
 	struct logbuf_entry *recovered[LOGBUF_PRIORITY_CAPACITY];
 	int nrecovered = 0;

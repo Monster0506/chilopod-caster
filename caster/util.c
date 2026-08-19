@@ -214,9 +214,7 @@ char *b64decode(char *str, size_t len, int add_nul) {
 
 /*
  * Parse a NMEA "GGA" line and return the full decoded sentence, if valid.
- *
- * Field layout (comma-separated, 15 fields including the leading "$xxGGA"):
- * time,lat,N/S,lon,E/W,quality,nsats,hdop,alt,M,geoid_sep,M,diff_age,diff_station*checksum
+ * Fields: time,lat,N/S,lon,E/W,quality,nsats,hdop,alt,M,geoid_sep,M,diff_age,diff_station*checksum
  */
 int parse_gga(const char *line, gga_t *gga) {
 	gga_t g;
@@ -516,9 +514,8 @@ void iso_date_from_timeval(char *iso_date, size_t iso_date_len, struct timeval *
 }
 
 /*
- * Parse an RFC3339 UTC timestamp ("...SSZ" or "...SS.fffffffffZ", with 1-9
- * fractional digits). Go's encoding/json trims trailing zeros in the
- * fraction, so the digit count varies by caller; this accepts all of them.
+ * Parse an RFC3339 UTC timestamp ("...SSZ" or "...SS.fffffffffZ", 1-9
+ * fractional digits); Go's encoding/json trims trailing zeros, so all counts are accepted.
  */
 int timeval_from_iso_date(struct timeval *t, const char *iso_date) {
 	struct tm date;
