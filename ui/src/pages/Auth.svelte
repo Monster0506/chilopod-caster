@@ -295,7 +295,7 @@
   {#if error}
     <p class="error">{error}</p>
   {:else if loading}
-    <p class="loading">Loading…</p>
+    <p class="loading">Loading...</p>
   {:else}
     <div class="card">
       <h3>Rover Authentication</h3>
@@ -306,7 +306,7 @@
         </div>
         <div class="card-actions">
           <button type="button" onclick={enableRoverAuth} disabled={savingRoverAuthFilename}>
-            {savingRoverAuthFilename ? 'Enabling…' : 'Enable'}
+            {savingRoverAuthFilename ? 'Enabling...' : 'Enable'}
           </button>
         </div>
       {:else}
@@ -325,10 +325,10 @@
                 </span>
                 <label>New password <input type="text" bind:value={roverPasswordInputs[a.user]} placeholder="(unchanged)" /></label>
                 <button type="button" onclick={() => setRoverPassword(a.user)} disabled={!roverPasswordInputs[a.user] || settingRoverPasswordUser === a.user}>
-                  {settingRoverPasswordUser === a.user ? 'Saving…' : 'Set password'}
+                  {settingRoverPasswordUser === a.user ? 'Saving...' : 'Set password'}
                 </button>
                 <button type="button" class="remove-btn" onclick={() => removeRoverAccount(a.user)} disabled={removingRoverUser === a.user}>
-                  {removingRoverUser === a.user ? 'Removing…' : 'Remove'}
+                  {removingRoverUser === a.user ? 'Removing...' : 'Remove'}
                 </button>
               </div>
             {/each}
@@ -338,7 +338,7 @@
         <div class="recipient-row recipient-add">
           <label>New username <input type="text" bind:value={newRoverUser} /></label>
           <label>New password <input type="text" bind:value={newRoverPassword} /></label>
-          <button type="button" onclick={addRoverAccount} disabled={addingRoverAccount}>{addingRoverAccount ? 'Adding…' : '+ Add account'}</button>
+          <button type="button" onclick={addRoverAccount} disabled={addingRoverAccount}>{addingRoverAccount ? 'Adding...' : '+ Add account'}</button>
         </div>
       {/if}
     </div>
@@ -361,7 +361,7 @@
                   <RevealSecret value={c.password} />
                 </span>
                 <button type="button" class="remove-btn" onclick={() => removeSmtpAuthCredential(c.host)} disabled={removingSmtpAuthHost === c.host}>
-                  {removingSmtpAuthHost === c.host ? 'Removing…' : 'Remove'}
+                  {removingSmtpAuthHost === c.host ? 'Removing...' : 'Remove'}
                 </button>
               </div>
             {/each}
@@ -372,7 +372,7 @@
           <label>Host <input type="text" bind:value={newSmtpAuthHost} placeholder={form.alarms.smtp.host} /></label>
           <label>Username <input type="text" bind:value={newSmtpAuthUser} /></label>
           <label>Password <input type="password" bind:value={newSmtpAuthPassword} /></label>
-          <button type="button" onclick={setSmtpAuthCredential} disabled={savingSmtpAuth}>{savingSmtpAuth ? 'Saving…' : 'Set credential'}</button>
+          <button type="button" onclick={setSmtpAuthCredential} disabled={savingSmtpAuth}>{savingSmtpAuth ? 'Saving...' : 'Set credential'}</button>
         </div>
         <span class="field-hint">Setting a host that already has a credential replaces it.</span>
       {/if}
@@ -387,7 +387,7 @@
         </div>
         <div class="card-actions">
           <button type="button" onclick={enableUserAuth} disabled={savingUserAuthFilename}>
-            {savingUserAuthFilename ? 'Enabling…' : 'Enable'}
+            {savingUserAuthFilename ? 'Enabling...' : 'Enable'}
           </button>
         </div>
       {:else}
@@ -412,10 +412,10 @@
                 </label>
                 <label>New password <input type="text" bind:value={consolePasswordInputs[a.user]} placeholder="(unchanged)" /></label>
                 <button type="button" onclick={() => setConsolePassword(a.user)} disabled={!consolePasswordInputs[a.user] || settingConsolePasswordUser === a.user}>
-                  {settingConsolePasswordUser === a.user ? 'Saving…' : 'Set password'}
+                  {settingConsolePasswordUser === a.user ? 'Saving...' : 'Set password'}
                 </button>
                 <button type="button" class="remove-btn" onclick={() => removeConsoleUser(a.user)} disabled={removingConsoleUser === a.user}>
-                  {removingConsoleUser === a.user ? 'Removing…' : 'Remove'}
+                  {removingConsoleUser === a.user ? 'Removing...' : 'Remove'}
                 </button>
               </div>
             {/each}
@@ -431,7 +431,7 @@
               {#each ROLES as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
             </select>
           </label>
-          <button type="button" onclick={addConsoleUser} disabled={addingConsoleUser}>{addingConsoleUser ? 'Adding…' : '+ Add account'}</button>
+          <button type="button" onclick={addConsoleUser} disabled={addingConsoleUser}>{addingConsoleUser ? 'Adding...' : '+ Add account'}</button>
         </div>
         <span class="field-hint">The <code>admin_user</code> account in caster.yaml keeps working as-is and can't be removed here.</span>
       {/if}

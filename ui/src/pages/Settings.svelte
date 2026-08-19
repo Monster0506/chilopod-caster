@@ -362,7 +362,7 @@
   {#if error}
     <p class="error">{error}</p>
   {:else if loading}
-    <p class="loading">Loading…</p>
+    <p class="loading">Loading...</p>
   {:else}
   <div class="settings-layout">
   <div class="settings-main">
@@ -511,7 +511,7 @@
           {/if}
 
           <div class="card-actions">
-            <button type="submit" disabled={savingSection === 'alarms'}>{savingSection === 'alarms' ? 'Saving…' : 'Save'}</button>
+            <button type="submit" disabled={savingSection === 'alarms'}>{savingSection === 'alarms' ? 'Saving...' : 'Save'}</button>
           </div>
         </form>
       {/if}
@@ -525,7 +525,7 @@
           <label>Confirm password <input type="password" bind:value={confirmPassword} /></label>
         </div>
         <div class="card-actions">
-          <button type="submit" disabled={savingPassword}>{savingPassword ? 'Saving…' : 'Change password'}</button>
+          <button type="submit" disabled={savingPassword}>{savingPassword ? 'Saving...' : 'Change password'}</button>
         </div>
       </form>
     </div>
@@ -551,7 +551,7 @@
           </div>
           <div class="card-actions">
             <button type="submit" disabled={savingSection === section.key}>
-              {savingSection === section.key ? 'Saving…' : 'Save'}
+              {savingSection === section.key ? 'Saving...' : 'Save'}
             </button>
           </div>
         </form>

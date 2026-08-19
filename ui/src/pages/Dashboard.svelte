@@ -2,6 +2,7 @@
   import { apiGet, apiPost, isAdmin } from '../lib/api.js';
   import { ggaQualityColor, ggaQualityLabel } from '../lib/gga.js';
   import { pushToast } from '../lib/toast.js';
+  import { ArrowUp, ArrowDown } from '@lucide/svelte';
 
   const admin = isAdmin();
 
@@ -232,7 +233,7 @@
     {#if admin}
       <div class="reload-wrap">
         <button onclick={reload} disabled={reloading}>
-          {reloading ? 'Reloading…' : 'Reload Config'}
+          {reloading ? 'Reloading...' : 'Reload Config'}
         </button>
       </div>
     {/if}
@@ -241,7 +242,7 @@
   {#if error}
     <p class="error">{error}</p>
   {:else if !net || !sourcetable}
-    <p class="loading">Loading…</p>
+    <p class="loading">Loading...</p>
   {:else}
     {@const cc = connCounts(net)}
     {@const roverList = rovers(net)}
@@ -297,7 +298,8 @@
         <div class="stat-sub">{cc.clients} clients &middot; {cc.sources} sources</div>
         {#if connTrend}
           <div class="trend" class:up={connTrend.delta > 0} class:down={connTrend.delta < 0}>
-            {connTrend.delta > 0 ? '▲' : connTrend.delta < 0 ? '▼' : '–'} {Math.abs(connTrend.delta)}
+            {#if connTrend.delta > 0}<ArrowUp size={12} />{:else if connTrend.delta < 0}<ArrowDown size={12} />{:else}-{/if}
+            {Math.abs(connTrend.delta)}
             <span class="dim">vs {formatElapsed(connTrend.elapsedS)} ago</span>
           </div>
         {/if}
@@ -353,8 +355,8 @@
                 <tr>
                   <td><span class="dot" class:good={s.live} class:off={!s.live}></span></td>
                   <td class="mono">{s.key}</td>
-                  <td>{s.group || '—'}</td>
-                  <td class="mono">{s.svs ?? '—'}</td>
+                  <td>{s.group || '-'}</td>
+                  <td class="mono">{s.svs ?? '-'}</td>
                   <td class="mono">{formatLatency(s.latencyMs)}</td>
                 </tr>
               {/each}
@@ -402,7 +404,7 @@
                 <tr>
                   <td><span class="dot" style="background:{ggaQualityColor(r.gga?.quality)}"></span></td>
                   <td class="mono">{r.auth_user ?? r.ip}</td>
-                  <td class="mono">{r.assigned_base ?? r.mountpoint ?? '—'}</td>
+                  <td class="mono">{r.assigned_base ?? r.mountpoint ?? '-'}</td>
                   <td class="mono">{formatDist(r.dist_to_base_m)}</td>
                   <td>{ggaQualityLabel(r.gga?.quality)}</td>
                 </tr>

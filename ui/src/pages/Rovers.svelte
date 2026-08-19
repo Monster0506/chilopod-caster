@@ -109,7 +109,7 @@
 {#if error}
   <p class="error">{error}</p>
 {:else if !data}
-  <p class="loading">Loading…</p>
+  <p class="loading">Loading...</p>
 {:else}
   {@const list = rovers(data)}
   <div class="table-wrap">
@@ -157,7 +157,7 @@
                   onclick={() => drop(conn.id)}
                   disabled={dropping.has(conn.id)}
                 >
-                  {dropping.has(conn.id) ? '…' : 'Drop'}
+                  {dropping.has(conn.id) ? '...' : 'Drop'}
                 </button>
               {/if}
             </td>
@@ -197,7 +197,7 @@
                   <div class="gga-detail-section">
                     <h4>NEAR candidates</h4>
                     {#if !near || near.loading}
-                      <p class="near-status">Loading…</p>
+                      <p class="near-status">Loading...</p>
                     {:else if near.error}
                       <p class="near-status">{near.error}</p>
                     {:else if near.data.candidates.length === 0}

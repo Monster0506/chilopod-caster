@@ -53,7 +53,7 @@
     </label>
 
     <button type="submit" disabled={loading}>
-      {loading ? 'Signing in…' : 'Sign in'}
+      {loading ? 'Signing in...' : 'Sign in'}
     </button>
   </form>
 </div>

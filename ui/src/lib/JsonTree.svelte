@@ -1,5 +1,6 @@
 <script>
   import JsonTree from './JsonTree.svelte';
+  import { ChevronRight, ChevronDown } from '@lucide/svelte';
 
   let { value, label = null, depth = 0 } = $props();
 
@@ -12,6 +13,10 @@
   {@const entries = Object.entries(value)}
   <details class="json-node" open={depth < 2}>
     <summary class="json-summary">
+      <span class="json-caret">
+        <ChevronRight size={12} class="json-caret-closed" />
+        <ChevronDown size={12} class="json-caret-open" />
+      </span>
       {#if label !== null}<span class="json-key">{label}</span>{/if}
       <span class="json-type">{'{'}{entries.length}{'}'}</span>
     </summary>
@@ -24,6 +29,10 @@
 {:else if Array.isArray(value)}
   <details class="json-node" open={depth < 2}>
     <summary class="json-summary">
+      <span class="json-caret">
+        <ChevronRight size={12} class="json-caret-closed" />
+        <ChevronDown size={12} class="json-caret-open" />
+      </span>
       {#if label !== null}<span class="json-key">{label}</span>{/if}
       <span class="json-type">[{value.length}]</span>
     </summary>
@@ -64,15 +73,23 @@
     display: none;
   }
 
-  .json-summary::before {
-    content: '▸';
-    display: inline-block;
+  .json-caret {
+    display: inline-flex;
+    align-items: center;
     width: 1em;
     color: var(--text-dim);
   }
 
-  .json-node[open] > .json-summary::before {
-    content: '▾';
+  .json-caret :global(.json-caret-open) {
+    display: none;
+  }
+
+  .json-node[open] > .json-summary .json-caret :global(.json-caret-open) {
+    display: inline-flex;
+  }
+
+  .json-node[open] > .json-summary .json-caret :global(.json-caret-closed) {
+    display: none;
   }
 
   .json-key {

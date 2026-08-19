@@ -1,5 +1,6 @@
 <script>
   import { apiGet } from '../lib/api.js';
+  import { ChevronDown } from '@lucide/svelte';
 
   const LEVEL_NAMES = ['EMERG', 'ALERT', 'CRIT', 'ERR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG', 'EDEBUG'];
   const DEFAULT_LEVELS = ['EMERG', 'ALERT', 'CRIT', 'ERR', 'WARNING', 'NOTICE', 'INFO'];
@@ -91,7 +92,7 @@
     <div class="controls">
       <div class="type-filter" bind:this={filterEl}>
         <button type="button" class="filter-toggle" onclick={() => (filterOpen = !filterOpen)}>
-          Levels ({selectedLevels.size}) <span class="caret">▾</span>
+          Levels ({selectedLevels.size}) <span class="caret"><ChevronDown size={12} /></span>
         </button>
         {#if filterOpen}
           <div class="filter-panel">
@@ -109,7 +110,7 @@
           </div>
         {/if}
       </div>
-      <input class="search-input" type="text" placeholder="Filter message text…" bind:value={search} />
+      <input class="search-input" type="text" placeholder="Filter message text..." bind:value={search} />
       <label class="toggle">
         <input type="checkbox" bind:checked={autoRefresh} />
         Auto-refresh

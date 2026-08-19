@@ -294,7 +294,7 @@
       <label>Bitrate <input bind:value={form.bitrate} /></label>
     </div>
     <div class="form-actions">
-      <button type="submit" disabled={submitting}>{submitting ? 'Adding…' : 'Add mountpoint'}</button>
+      <button type="submit" disabled={submitting}>{submitting ? 'Adding...' : 'Add mountpoint'}</button>
     </div>
   </form>
 {/if}
@@ -302,7 +302,7 @@
 {#if error}
   <p class="error">{error}</p>
 {:else if !table}
-  <p class="loading">Loading…</p>
+  <p class="loading">Loading...</p>
 {:else}
   {@const entries = Object.entries(table.mountpoints)}
   <div class="table-wrap">
@@ -381,7 +381,7 @@
             <td class="actions">
               {#if editingMountpoint === key}
                 <button class="save-btn" onclick={() => saveEdit(key, mnt)} disabled={savingEdit}>
-                  {savingEdit ? '…' : 'Save'}
+                  {savingEdit ? '...' : 'Save'}
                 </button>
                 <button class="cancel-btn" onclick={cancelEdit} disabled={savingEdit}>Cancel</button>
                 {#if editMsg}<div class="auth-msg">{editMsg}</div>{/if}
@@ -406,7 +406,7 @@
                       disabled={detecting.has(key)}
                       title="Fetch real decoded message types and station position from the live stream, and update this row to match"
                     >
-                      {detecting.has(key) ? '…' : 'Detect'}
+                      {detecting.has(key) ? '...' : 'Detect'}
                     </button>
                   {/if}
                   <button
@@ -415,7 +415,7 @@
                     disabled={removing.has(key)}
                     title="Remove"
                   >
-                    {#if removing.has(key)}…{:else}<Trash2 size={14} />{/if}
+                    {#if removing.has(key)}...{:else}<Trash2 size={14} />{/if}
                   </button>
                 {/if}
               {/if}
