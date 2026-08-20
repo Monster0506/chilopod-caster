@@ -587,6 +587,9 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 		struct config_alarms_position_drift *pd = alarms->position_drift;
 		int triggered = 0;
 		char reason[256] = "";
+		pos_t received_pos = {0}, reference_pos = {0};
+		double received_alt = 0, reference_alt = 0;
+		int have_lat_lon = 0, have_alt = 0;
 
 		P_RWLOCK_RDLOCK(&caster->rtcm_lock);
 		struct rtcm_info *rp = (struct rtcm_info *)hash_table_get(caster->rtcm_cache, mountpoint);
@@ -603,6 +606,16 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 				triggered = 1;
 				append_drift_reason(reason, sizeof reason, "altitude", rp->avg_alt_drift_mm, pd->alt_mm);
 			}
+			if (rp->has_lat_lon_drift) {
+				received_pos = rp->last_observed_pos;
+				reference_pos = rp->last_declared_pos;
+				have_lat_lon = 1;
+			}
+			if (rp->has_baseline_alt) {
+				received_alt = rp->last_observed_alt;
+				reference_alt = rp->baseline_alt;
+				have_alt = 1;
+			}
 		}
 		P_RWLOCK_UNLOCK(&caster->rtcm_lock);
 
@@ -612,8 +625,16 @@ static void alarms_check_one(struct caster_state *caster, struct config_alarms *
 			double minutes = timeval_diff_minutes(now, &state->drift_since);
 			if (minutes >= pd->after_minutes
 					&& alarm_rate_ok(state, ALARM_POSITION_DRIFT, now, alarms->min_interval_minutes)) {
-				char body[350];
-				snprintf(body, sizeof body, "Station %s position drift: %s. Ongoing for %.0f minutes.", mountpoint, reason, minutes);
+				char body[512];
+				size_t len = snprintf(body, sizeof body, "Station %s position drift: %s. Ongoing for %.0f minutes.", mountpoint, reason, minutes);
+				if (have_lat_lon && len < sizeof body)
+					len += snprintf(body + len, sizeof body - len,
+						" Received position: lat %.7f, lon %.7f. Reference position: lat %.7f, lon %.7f.",
+						received_pos.lat, received_pos.lon, reference_pos.lat, reference_pos.lon);
+				if (have_alt && len < sizeof body)
+					len += snprintf(body + len, sizeof body - len,
+						" Received altitude: %.2fm. Reference altitude: %.2fm.",
+						received_alt, reference_alt);
 				if (fire_alarm(caster, alarms, mountpoint, ALARM_POSITION_DRIFT, "position drift", body))
 					state->last_sent[ALARM_POSITION_DRIFT] = *now;
 			}

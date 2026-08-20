@@ -623,6 +623,9 @@ struct rtcm_info *rtcm_info_new() {
 	this->avg_alt_drift_mm = 0;
 	this->has_baseline_alt = 0;
 	this->baseline_alt = 0;
+	memset(&this->last_observed_pos, 0, sizeof(this->last_observed_pos));
+	this->last_observed_alt = 0;
+	memset(&this->last_declared_pos, 0, sizeof(this->last_declared_pos));
 	REFCNT_INIT(this);
 	return this;
 }
@@ -802,8 +805,11 @@ void rtcm_info_update_drift(struct rtcm_info *this, pos_t *declared_pos) {
 	if (!rtcm_typeset_check(&this->typeset, 1005) && !rtcm_typeset_check(&this->typeset, 1006))
 		return;
 	ecef_to_lat_lon(&observed, &alt, this->x, this->y, this->z);
+	this->last_observed_pos = observed;
+	this->last_observed_alt = alt;
 
 	if (declared_pos) {
+		this->last_declared_pos = *declared_pos;
 		double lat_diff_mm = (observed.lat - declared_pos->lat) * METERS_PER_DEG_LAT * 1000;
 		double lon_diff_mm = (observed.lon - declared_pos->lon) * METERS_PER_DEG_LAT
 			* cos(declared_pos->lat * M_PI / 180) * 1000;

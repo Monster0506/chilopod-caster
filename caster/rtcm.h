@@ -46,6 +46,12 @@ struct rtcm_info {
 	double avg_lat_drift_mm, avg_lon_drift_mm, avg_alt_drift_mm;
 	int has_baseline_alt;
 	double baseline_alt;
+
+	// Last observed (received) position/altitude decoded from 1005/1006, and
+	// the declared position it was last compared against, for alarm reporting.
+	pos_t last_observed_pos;
+	double last_observed_alt;
+	pos_t last_declared_pos;
 };
 
 /*
